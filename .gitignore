@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+npm/
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Caches
+.cache/
+.vite/
+*.log
+
+# Secrets — NEVER commit
+*.env
+.env.*
+**/auth.json
+**/creds.json
+**/secrets.json
+*-keys.json
+deploy-token
+.deploy-token
+*.pem
+*.key
+*.p12
+
+# Local pi runtime (never ship these)
+sessions/
+teams/
+intercom/
+mcp-cache.json
+mcp-oauth/
+memory/
+logs/
+session-*-cache.json
