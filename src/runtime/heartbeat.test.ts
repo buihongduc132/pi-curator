@@ -349,3 +349,96 @@ describe("createBeforeExitHandler", () => {
     await expect(handler()).resolves.toBeUndefined();
   });
 });
+
+// ─── curatorSessionId pointer write-back (LD1) ─────────────────────────────
+//
+// RED PHASE: these tests are EXPECTED TO FAIL until the GREEN phase adds:
+//   - `tickHeartbeat` accepting `curatorSessionId` in opts
+//   - `TickResult.curatorSessionId` carrying it through
+//   - `startHeartbeat` passing curatorSessionId to the writer (first tick only)
+//
+// See: flow/findings/curator-observability/2026-07-07-locked-decisions.yaml LD1.
+
+describe("tickHeartbeat — curatorSessionId pointer (LD1)", () => {
+  it("accepts curatorSessionId in opts and surfaces it in the TickResult", () => {
+    const r = tickHeartbeat(
+      { phase: "scanning" },
+      { nowMs: 1_700_000_000_000, curatorSessionId: "ses_123" },
+    );
+    expect(r.heartbeatAt).toBe(new Date(1_700_000_000_000).toISOString());
+    expect(r.phase).toBe("scanning");
+    expect(r.curatorSessionId).toBe("ses_123");
+  });
+
+  it("returns curatorSessionId undefined when no id is known", () => {
+    const r = tickHeartbeat({ phase: "scanning" }, { nowMs: 0 });
+    expect(r.curatorSessionId).toBeUndefined();
+  });
+
+  it("carries curatorSessionId alongside a phase event", () => {
+    const r = tickHeartbeat(
+      { phase: "spawned" },
+      { nowMs: 0, phaseEvent: "start_review", curatorSessionId: "ses_abc" },
+    );
+    expect(r.phase).toBe("scanning");
+    expect(r.curatorSessionId).toBe("ses_abc");
+  });
+});
+
+describe("startHeartbeat — curatorSessionId write-back (LD1)", () => {
+  function setup() {
+    const writes: Array<{ phase?: string; nowMs?: number; curatorSessionId?: string }> = [];
+    const writer = async (
+      _file: string,
+      _pid: number,
+      opts: { phase?: string; nowMs?: number; curatorSessionId?: string },
+    ) => {
+      writes.push({ ...opts });
+      return "updated" as const;
+    };
+    const timers: Array<() => void> = [];
+    const scheduler = {
+      setInterval: (cb: () => void, _ms: number) => {
+        timers.push(cb);
+        return timers.length - 1;
+      },
+      clearInterval: (_h: unknown) => {},
+    };
+    return { writes, writer, scheduler, timers };
+  }
+
+  it("writes curatorSessionId on the first heartbeat tick", async () => {
+    const env = setup();
+    const ctrl = startHeartbeat({
+      pidsFile: "/tmp/pids/spec.json",
+      pid: 4242,
+      seedPhase: "spawned",
+      now: () => 1000,
+      scheduler: env.scheduler,
+      writer: env.writer,
+      curatorSessionId: "ses_123",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(env.writes.length).toBeGreaterThanOrEqual(1);
+    expect(env.writes[0]!.curatorSessionId).toBe("ses_123");
+    ctrl.stop();
+  });
+
+  it("does NOT pass curatorSessionId when none was provided", async () => {
+    const env = setup();
+    const ctrl = startHeartbeat({
+      pidsFile: "/tmp/pids/spec.json",
+      pid: 4242,
+      seedPhase: "spawned",
+      now: () => 1000,
+      scheduler: env.scheduler,
+      writer: env.writer,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(env.writes.length).toBeGreaterThanOrEqual(1);
+    expect(env.writes[0]!.curatorSessionId).toBeUndefined();
+    ctrl.stop();
+  });
+});

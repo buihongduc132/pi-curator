@@ -1,4 +1,4 @@
-status: ongoing
+status: closed
 threads:
   - id: OT1
     topic: Does pi-curator ship a sophisticated logging mechanism?
@@ -33,11 +33,13 @@ threads:
   - id: OT4
     topic: spawn-log/ dir proposed in lifecycle proposal but never built
     raised_in: turn1
-    status: open
-    disposition: escalated
-    escalated_to: user
-    # Two valid paths (build now vs defer). Gold-plating risk vs audit value.
-    # No evidence breaks tie → STOP + ASK. (D-C in turn2.)
+    status: resolved
+    resolution: >
+      DEFER. spawn-log is Tier 3, above locked floor (LD2). No pain yet.
+      Cheaper alternative exists (append to pids file). Gold-plating risk.
+      Decision in spawnlog-decision.md.
+    resolved_in: findings-to-workable-tasks
+    disposition: deferred
 
   - id: OT5
     topic: Full structured logging library (levels, sinks, context)
@@ -48,11 +50,13 @@ threads:
   - id: OT6
     topic: Crosscheck suppressed findings are invisible (no suppressed.jsonl)
     raised_in: turn1
-    status: open
-    disposition: escalated
-    escalated_to: user
-    # Conditional on user trust of first-finding-wins dedup.
-    # No evidence breaks tie → STOP + ASK. (D-D in turn2.)
+    status: resolved
+    resolution: >
+      SKIP. Crosscheck opt-in/disabled by default, suppression rare, summary
+      recoverable from pi session, design accepts tradeoff.
+      Decision in suppressed-decision.md.
+    resolved_in: findings-to-workable-tasks
+    disposition: skipped
 
   - id: OT7
     topic: Add curatorSessionId pointer to pids schema (correlation, not capture)

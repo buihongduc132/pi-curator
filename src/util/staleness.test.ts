@@ -562,3 +562,59 @@ describe("path helpers", () => {
 });
 
 // ─── Test scaffolding (makeTmpDir inlined in each beforeEach) ─────────────
+
+// ─── curatorSessionId pointer surfacing (LD1) ───────────────────────────────
+//
+// RED PHASE: these tests are EXPECTED TO FAIL until the GREEN phase makes
+// readPidEntries surface curatorSessionId via parseCuratorClaim.
+//
+// See: flow/findings/curator-observability/2026-07-07-locked-decisions.yaml LD1.
+
+describe("readPidEntries — curatorSessionId surfacing (LD1)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-curator-test-"));
+  });
+
+  it("surfaces curatorSessionId when the pid file carries it", async () => {
+    const dir = path.join(tmpDir, "ses-main");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "spec.json"),
+      JSON.stringify(makeEntry({ curator: "spec", curatorSessionId: "ses_abc123" })),
+    );
+    const entries = await readPidEntries(dir, { nowMs: NOW, kill: killAlive() });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].curatorSessionId).toBe("ses_abc123");
+  });
+
+  it("leaves curatorSessionId undefined for legacy entries (no pointer)", async () => {
+    const dir = path.join(tmpDir, "ses-main");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "spec.json"),
+      JSON.stringify(makeEntry({ curator: "spec" })), // no curatorSessionId
+    );
+    const entries = await readPidEntries(dir, { nowMs: NOW, kill: killAlive() });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].curatorSessionId).toBeUndefined();
+  });
+
+  it("can mix legacy + pointer-bearing entries", async () => {
+    const dir = path.join(tmpDir, "ses-main");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "legacy.json"),
+      JSON.stringify(makeEntry({ curator: "legacy" })),
+    );
+    fs.writeFileSync(
+      path.join(dir, "pointer.json"),
+      JSON.stringify(makeEntry({ curator: "pointer", curatorSessionId: "ses_xyz" })),
+    );
+    const entries = await readPidEntries(dir, { nowMs: NOW, kill: killAlive() });
+    const byCurator = Object.fromEntries(entries.map((e) => [e.curator, e.curatorSessionId]));
+    expect(byCurator.legacy).toBeUndefined();
+    expect(byCurator.pointer).toBe("ses_xyz");
+  });
+});

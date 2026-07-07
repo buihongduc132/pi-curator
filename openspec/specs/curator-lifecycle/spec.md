@@ -85,7 +85,19 @@ The system SHALL filter the main session JSONL into a trimmed fork-input file be
 - **THEN** curator spawned with detached:false
 - **AND** child dies when main exits
 
-### Requirement: PID + heartbeat registration
+#### Scenario: Curator observability surface (black-box by design)
+- **WHEN** a curator is spawned
+- **THEN** its observability surface = the pi session store
+  (`~/.pi/agent/sessions/`, findable via `pi --resume` by the shipped
+  `--name "curator:<alias>"`) PLUS the `curatorSessionId` pointer in the
+  pids file [LD1] PLUS the D11 stderr crash-catch
+  (`~/.pi-curator/logs/...`)
+- **AND** the curator is black-box by design — its reasoning is NOT
+  re-emitted to the main turn; it persists as a first-class pi session
+  (see design decision D15)
+- **AND** the D11 stderr capture exists ONLY for the edge case where the
+  curator died before writing any session JSONL; it does not undermine the
+  black-box posture
 
 The system SHALL write a PID registration file at `~/.pi-curator/pids/<mainSessionId>/<curator>.json` BEFORE invoking `child_process.spawn`. The file SHALL contain `{pid, mainSessionId, mainSessionName, curator, spawnedAt, heartbeatAt, phase, goalFile}`. The curator runtime SHALL refresh `heartbeatAt` every `heartbeat.intervalSec` seconds (default 5) and update `phase` as it progresses through its task. All file writes SHALL use atomic write (`.tmp.<pid>.<ts>` + rename) and `withLock` around every read-modify-write.
 

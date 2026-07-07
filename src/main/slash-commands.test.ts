@@ -305,6 +305,62 @@ describe("formatStatusOutput", () => {
   });
 });
 
+// ─── formatStatusOutput — curatorSessionId pointer link (LD1) ───────────────
+//
+// RED PHASE: EXPECTED TO FAIL until the GREEN phase makes formatStatusOutput
+// render the curatorSessionId link when present (e.g. `curator:spec → ses_abc123`).
+//
+// See: flow/findings/curator-observability/2026-07-07-locked-decisions.yaml LD1.
+
+describe("formatStatusOutput — curatorSessionId link (LD1)", () => {
+  it("includes the curatorSessionId link when the pointer is present", () => {
+    const entries: StalePidEntry[] = [
+      {
+        ...makeClaim({ curator: "spec", curatorSessionId: "ses_abc123" }),
+        liveness: "live",
+        ageMs: 1000,
+      },
+    ];
+    const out = formatStatusOutput(entries);
+    // The output links the curator alias to its session id (one-click jump).
+    expect(out).toContain("ses_abc123");
+    expect(out.toLowerCase()).toContain("curator:spec");
+  });
+
+  it("omits the pointer link when curatorSessionId is absent (legacy)", () => {
+    const entries: StalePidEntry[] = [
+      {
+        ...makeClaim({ curator: "spec" }), // no curatorSessionId
+        liveness: "live",
+        ageMs: 1000,
+      },
+    ];
+    const out = formatStatusOutput(entries);
+    // No stray arrow / pointer token for legacy entries.
+    expect(out).not.toContain("→");
+    expect(out).not.toMatch(/curator:spec\s*→/);
+  });
+
+  it("renders a mix of legacy + pointer-bearing entries", () => {
+    const entries: StalePidEntry[] = [
+      {
+        ...makeClaim({ curator: "legacy" }),
+        liveness: "live",
+        ageMs: 1000,
+      },
+      {
+        ...makeClaim({ curator: "pointer", curatorSessionId: "ses_xyz" }),
+        liveness: "live",
+        ageMs: 2000,
+      },
+    ];
+    const out = formatStatusOutput(entries);
+    expect(out).toContain("ses_xyz");
+    // legacy line has no arrow pointer
+    expect(out).not.toMatch(/curator:legacy\s*→/);
+  });
+});
+
 // ─── formatHelp ─────────────────────────────────────────────────────────────
 
 describe("formatHelp", () => {
