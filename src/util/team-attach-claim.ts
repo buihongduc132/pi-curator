@@ -56,6 +56,13 @@ export interface CuratorClaim {
   phase: string;
   /** Absolute path to the persona goal file (optional). */
   goalFile?: string;
+  /**
+   * Curator's OWN session id (LD1 pointer). Written by the curator runtime on
+   * its first heartbeat tick so `/curator status` can render a one-click jump
+   * to the curator's session. Optional: legacy claims omit it (undefined, NOT
+   * a hard error). Round-trips through parseCuratorClaim/claimToJson.
+   */
+  curatorSessionId?: string;
 }
 
 /** Result of assessing a claim's freshness (boolean-friendly). */
@@ -178,6 +185,9 @@ export function parseCuratorClaim(value: unknown): CuratorClaim | null {
     heartbeatAt,
     phase,
     goalFile: getOptionalString(value, "goalFile"),
+    // LD1: preserve the curatorSessionId pointer when present + non-empty.
+    // Absent / empty / non-string → undefined (legacy, NOT a hard error).
+    curatorSessionId: getOptionalString(value, "curatorSessionId"),
   };
 }
 
@@ -277,7 +287,7 @@ export async function acquireCuratorClaim(
 export async function heartbeatCuratorClaim(
   filePath: string,
   pid: number,
-  opts: { phase?: string; nowMs?: number } = {},
+  opts: { phase?: string; nowMs?: number; curatorSessionId?: string } = {},
 ): Promise<CuratorClaimHeartbeatResult> {
   const lockFile = claimLockPath(filePath);
   await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
@@ -294,6 +304,9 @@ export async function heartbeatCuratorClaim(
         ...current,
         heartbeatAt: nowIso,
         ...(opts.phase ? { phase: opts.phase } : {}),
+        // LD1: stamp the curatorSessionId pointer when provided (first tick).
+        // When omitted, `...current` preserves any pointer already on disk.
+        ...(opts.curatorSessionId ? { curatorSessionId: opts.curatorSessionId } : {}),
       };
       await writeCuratorClaim(filePath, updated);
       return "updated";

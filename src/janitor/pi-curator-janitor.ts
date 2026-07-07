@@ -37,7 +37,12 @@ function parseArgs(argv: string[]): Record<string, string | boolean> {
   return out;
 }
 
-async function tickOnce(pidsRoot: string, archiveDir: string, forksDir: string): Promise<void> {
+async function tickOnce(
+  pidsRoot: string,
+  archiveDir: string,
+  forksDir: string,
+  logsDir?: string,
+): Promise<void> {
   // Janitor sweeps ALL main sessions (pidsRoot/<mainSessionId>/*). Enumerate
   // per-session dirs; also include the flat case (pidsRoot/<curator>.json).
   let sessionDirs: string[] = [];
@@ -53,12 +58,16 @@ async function tickOnce(pidsRoot: string, archiveDir: string, forksDir: string):
 
   let swept = 0;
   let forksDeleted = 0;
+  let logsDeleted = 0;
   let live = 0;
   const errors: string[] = [];
   for (const dir of sessionDirs) {
-    const r = await runTick(dir, { archiveDir, forksDir, killPids: true });
+    // D11: pass logsDir so Phase 3 (stderr log GC) actually runs in prod.
+    // runTick treats a missing/unreadable logsDir as a no-op.
+    const r = await runTick(dir, { archiveDir, forksDir, killPids: true, logsDir });
     swept += r.swept;
     forksDeleted += r.forksDeleted;
+    logsDeleted += r.logsDeleted;
     live += r.live;
     errors.push(...r.errors);
   }
@@ -67,7 +76,7 @@ async function tickOnce(pidsRoot: string, archiveDir: string, forksDir: string):
     console.error(`[pi-curator-janitor ${ts}] tick errors:`, errors);
   }
   console.log(
-    `[pi-curator-janitor ${ts}] swept=${swept} forksDeleted=${forksDeleted} live=${live}`,
+    `[pi-curator-janitor ${ts}] swept=${swept} forksDeleted=${forksDeleted} logsDeleted=${logsDeleted} live=${live}`,
   );
 }
 
@@ -77,9 +86,13 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   const pidsRoot = (args["pids-dir"] as string) || path.join(root, "pids");
   const archiveDir = (args["archive-dir"] as string) || path.join(root, "pids-archive");
   const forksDir = (args["forks-dir"] as string) || path.join(root, "forks");
+  // D11: wire the logs dir so the janitor's Phase 3 (stderr log GC) runs in
+  // production. Defaults to ~/.pi-curator/logs — the same logsBaseDir the
+  // spawn hook (spawn-args.ts) writes stderr into.
+  const logsDir = (args["logs-dir"] as string) || path.join(root, "logs");
   const intervalMs = Number(args["interval-ms"] || 5 * 60 * 1000);
 
-  const tick = () => tickOnce(pidsRoot, archiveDir, forksDir).catch((err) => {
+  const tick = () => tickOnce(pidsRoot, archiveDir, forksDir, logsDir).catch((err) => {
     console.error(
       `[pi-curator-janitor ${new Date().toISOString()}] fatal tick error:`,
       err instanceof Error ? err.message : String(err),

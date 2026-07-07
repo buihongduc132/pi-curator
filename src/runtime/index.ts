@@ -46,6 +46,14 @@ import {
   type CuratorIdentity,
   type SignalMainTool,
 } from "./signal-main.js";
+import {
+  startHeartbeat,
+  createBeforeExitHandler,
+} from "./heartbeat.js";
+import {
+  curatorClaimFile,
+  defaultPidRoot,
+} from "../util/team-attach-claim.js";
 
 type AnyExtensionAPI = import("@mariozechner/pi-coding-agent").ExtensionAPI | any;
 type AnyExtensionContext = any;
@@ -149,6 +157,50 @@ export default function curatorRuntimeExtension(
     pi.registerTool?.(tool);
     ctx?.ui?.notify?.(
       `curator-runtime: signal_main registered (target: ${identity.mainSessionName})`,
+      "info",
+    );
+
+    // Start the heartbeat refresh loop (REQ-CR "Heartbeat refresh loop") +
+    // register the terminal `done` write on beforeExit (REQ-CR "Curator sets
+    // done before exit"). The claim file (`pids/<mainSessionId>/<curator>.json`)
+    // is the SHARED contract with the staleness detector (REQ-LC-06) and the
+    // janitor (REQ-LC-08). The curator's own session id (LD1 pointer) is read
+    // from the pi context so `/curator status` can link back to this session.
+    //
+    // This is production wiring: WITHOUT this call, the heartbeat loop never
+    // starts, the claim file is never refreshed after the main-side `phase:
+    // "spawned"` seed, and `curatorSessionId` (LD1) is never written — making
+    // both the liveness heartbeat and the LD1 pointer dead code in prod.
+    const pidsFile = curatorClaimFile(
+      defaultPidRoot(),
+      identity.mainSessionId,
+      identity.curatorAlias,
+    );
+    const curatorSessionId = ctx?.sessionId ?? ctx?.session?.id;
+    startHeartbeat({
+      pidsFile,
+      pid: process.pid,
+      curatorSessionId,
+      onError: (err) => {
+        ctx?.ui?.notify?.(
+          `curator-runtime: heartbeat write failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          "warn",
+        );
+      },
+    });
+    // Terminal write: stamp `phase: "done"` as this curator's last act so the
+    // staleness detector frees the slot immediately (vs waiting for the
+    // dead-heartbeat timeout). Non-throwing per REQ-CR.
+    const writeDone = createBeforeExitHandler(pidsFile, process.pid);
+    process.on("beforeExit", () => {
+      void writeDone();
+    });
+    ctx?.ui?.notify?.(
+      `curator-runtime: heartbeat started (pid ${process.pid}${
+        curatorSessionId ? `, session ${curatorSessionId}` : ""
+      })`,
       "info",
     );
   } catch (err) {

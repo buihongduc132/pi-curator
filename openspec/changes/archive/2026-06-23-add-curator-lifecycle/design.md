@@ -322,6 +322,69 @@ because the timestamp is the primary signal — PID only ever flips
 - (a) Build a bespoke staleness module — duplicated work, drifts from teams.
   Rejected.
 
+### D15 — Curator observability posture: black-box by design
+**Choice**: The curator is **black-box by design**. Its reasoning, tool calls,
+and conclusions persist in the pi session store
+(`~/.pi/agent/sessions/`) as a first-class pi session, findable via
+`pi --resume` by the shipped `--name "curator:<alias>"`. The observability
+floor is exactly three layers:
+
+1. **Pi session store** — the curator's full reasoning, tool calls, results,
+   and assistant messages are recorded by pi itself (same as any normal
+   session). This is the primary observability surface.
+2. **`curatorSessionId` pointer in pids** [LD1] — an optional field in the
+   CuratorClaim pids file that provides a one-click jump from the pids
+   registration to the full session JSONL. Written on first curator
+   heartbeat; non-breaking (missing = legacy, fall back to name+timestamp
+   lookup via `pi --resume`).
+3. **D11 stderr crash-catch** — `stderr → ~/.pi-curator/logs/<mainSessionId>/<curator>-<ts>.stderr`.
+   This covers the ONE edge case where `~/.pi` has nothing: the curator
+   died before writing a session JSONL (e.g. MCP init explosion, OOM
+   before first heartbeat). D11 is NOT a violation of black-box-by-design;
+   it is the safety net for the pre-session-write crash that the pi
+   session store cannot cover.
+
+**Explicitly ABOVE the floor and currently DEFERRED:**
+
+- **Tier 3 — `spawn-log/` structured run-log** (JSONL per main session with
+  spawn decisions, gate reasons, outcomes): deferred until curators multiply
+  and the audit trail justifies the cost.
+- **Tier 4 — `suppressed.jsonl`** (crosscheck suppression recording): SKIP
+  per OT6 investigation — the first-finding-wins dedup is trusted and
+  recording suppressions adds complexity without proportional value.
+- **Tier 5 — Full logging library** (levels, sinks, context): rejected as
+  premature given Tier 0 (pi session store) already provides full reasoning
+  visibility.
+
+**Why**: the code was already black-box (curator reasoning lives in pi
+sessions), but design.md D11 (stderr→logs) appeared to contradict this.
+That contradiction IS the bug this decision resolves. Formalizing the
+posture turns an implicit drift into a principled stance: the floor is
+session store + pointer + crash-catch, nothing more. Future observability
+additions are explicitly opt-in tiers, not defaults.
+
+**Source**: user assertion (verbatim): "currently we are keeping the curator
+is to be blackbox, we always be able to read the pi session data in the
+~/.pi anyway" — verified against codebase: `pi --fork` creates a new
+session that persists to `~/.pi/agent/sessions/`. The curator is NOT a
+black box in the sense of "opaque" — it is a first-class pi session with
+full persistence. The real gap was correlation (which session is curator
+X?), solved by [LD1].
+
+**Alternatives considered**:
+- (a) Full logging library (Tier 5) — rejected as premature. Pi session
+  store already provides complete reasoning visibility. A logging library
+  adds uniformity but no new information at this stage.
+- (b) Leave implicit (no design decision) — rejected because the code/design
+  contradiction (code says black-box, D11 says stderr→logs) IS the bug.
+  Without formalization, future contributors cannot determine the intended
+  observability posture and will either over-build (Tier 5) or under-build
+  (ignore D11 entirely).
+
+**References**: [LD1] `flow/findings/curator-observability/2026-07-07-locked-decisions.yaml`
+(curatorSessionId pointer), [LD2] same file (black-box-by-design
+formalization).
+
 ## Risks / Trade-offs
 
 - **[Risk] `pi --fork --no-extensions -e ... -e ...` flag combination unverified**

@@ -37,7 +37,7 @@ import { filterSession, parseSession } from "../util/filter-session.js";
 import { trimSessionEntries, computeBudget } from "../util/trim-session.js";
 import { getCachedConfig, enabledPersonas, type ResolvedPersona } from "../util/config.js";
 import { evaluateSpawnGate } from "./spawn-gate.js";
-import { buildSpawnArgs } from "./spawn-args.js";
+import { buildSpawnArgs, resolveStdio } from "./spawn-args.js";
 import { defaultPidRoot, curatorClaimFile, acquireCuratorClaim, heartbeatCuratorClaim } from "../util/team-attach-claim.js";
 import { readPidEntries, summarizeLiveness, formatLivenessStatus } from "../util/staleness.js";
 
@@ -201,7 +201,13 @@ export async function handleTurnEnd(
     try {
       child = spawnFn(piBin, args, {
         detached: false,
-        stdio: ["ignore", "ignore", "ignore"],
+        // D11: stderr → logs for post-mortem, stdout → /dev/null (curators
+        // signal findings via signal_main, not stdout capture).
+        stdio: resolveStdio({
+          mainSessionId,
+          curatorAlias: persona.alias,
+          nowMs: Date.now(),
+        }),
       });
     } catch (err) {
       safeNotify(ctx, `curator: spawn failed for ${persona.alias}: ${err instanceof Error ? err.message : String(err)}`, "error");

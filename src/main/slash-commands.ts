@@ -256,7 +256,11 @@ export function formatStatusOutput(entries: StalePidEntry[]): string {
   }
   const summary = summarizeLiveness(entries);
   const lines = entries.map((e) => {
-    return `  ${e.curator}  pid=${e.pid}  ${e.liveness}  age=${(e.ageMs / 1000).toFixed(1)}s  phase=${e.phase}`;
+    const base = `  ${e.curator}  pid=${e.pid}  ${e.liveness}  age=${(e.ageMs / 1000).toFixed(1)}s  phase=${e.phase}`;
+    // LD1: render the curatorSessionId pointer link when present (one-click
+    // jump to the curator's session). Legacy entries (no pointer) omit it so
+    // no stray arrow appears.
+    return e.curatorSessionId ? `${base}  curator:${e.curator} → ${e.curatorSessionId}` : base;
   });
   return `Curator status (${summary.live} live, ${summary.stale} stale, ${summary.dead} dead):\n${lines.join("\n")}`;
 }

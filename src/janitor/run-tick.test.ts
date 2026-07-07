@@ -157,6 +157,64 @@ describe("runTick", () => {
   });
 });
 
+describe("runTick — D11 stderr log GC", () => {
+  it("GCs stderr log files older than forkTTL (24h) alongside fork artifacts", async () => {
+    const pidsDir = path.join(tmpDir, "pids");
+    const archiveDir = path.join(tmpDir, "pids-archive");
+    const forksDir = path.join(tmpDir, "forks");
+    const logsDir = path.join(tmpDir, "logs");
+    fs.mkdirSync(forksDir, { recursive: true });
+
+    // Create stderr log structure: logs/<sessionId>/<curator>-<ts>.stderr
+    const sessionLogsDir = path.join(logsDir, "sess-1");
+    fs.mkdirSync(sessionLogsDir, { recursive: true });
+
+    // old stderr log (2 days ago)
+    const oldLog = path.join(sessionLogsDir, "spec-1700000000000.stderr");
+    fs.writeFileSync(oldLog, "old diagnostic noise\n");
+    const oldTime = Date.now() - 2 * 24 * 60 * 60 * 1000;
+    fs.utimesSync(oldLog, oldTime / 1000, oldTime / 1000);
+
+    // fresh stderr log (1 hour ago)
+    const freshLog = path.join(sessionLogsDir, "spec-1700080000000.stderr");
+    fs.writeFileSync(freshLog, "fresh diagnostic noise\n");
+    const freshTime = Date.now() - 60 * 60 * 1000;
+    fs.utimesSync(freshLog, freshTime / 1000, freshTime / 1000);
+
+    const result = await runTick(pidsDir, {
+      archiveDir,
+      forksDir,
+      logsDir,
+      killPids: false,
+      checkPid: false,
+    });
+
+    // old log should be deleted
+    expect(fs.existsSync(oldLog)).toBe(false);
+    // fresh log should remain
+    expect(fs.existsSync(freshLog)).toBe(true);
+    // result should report the deleted log
+    expect(result.logsDeleted).toBe(1);
+  });
+
+  it("handles missing logsDir gracefully (no errors)", async () => {
+    const pidsDir = path.join(tmpDir, "pids");
+    const archiveDir = path.join(tmpDir, "pids-archive");
+    const forksDir = path.join(tmpDir, "forks");
+
+    const result = await runTick(pidsDir, {
+      archiveDir,
+      forksDir,
+      logsDir: path.join(tmpDir, "nonexistent-logs"),
+      killPids: false,
+      checkPid: false,
+    });
+
+    expect(result.logsDeleted).toBe(0);
+    expect(result.errors).toEqual([]);
+  });
+});
+
 describe("classifyPids", () => {
   it("classifies live vs dead entries", async () => {
     const pidsDir = path.join(tmpDir, "pids");

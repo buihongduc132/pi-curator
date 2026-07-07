@@ -29,6 +29,8 @@ export interface TickResult {
   swept: number;
   /** Number of forks deleted (older than forkTTL). */
   forksDeleted: number;
+  /** Number of stderr log files GC'd (older than forkTTL, D11). */
+  logsDeleted: number;
   /** Number of live curators left untouched (for diagnostics). */
   live: number;
   /** Errors encountered (non-fatal — logged, tick continues). */
@@ -53,6 +55,11 @@ export interface TickOptions {
   forkTTLms?: number;
   /** Injectable now for fork mtime comparison. */
   stat?: (p: string) => { mtimeMs: number };
+  /**
+   * Logs directory to GC alongside forks (D11). Recursively scanned for
+   * `*.stderr` files older than `forkTTL`; missing dir is a no-op.
+   */
+  logsDir?: string;
 }
 
 /** Classify all pids files in a directory as live/stale/dead. Pure-ish (fs). */
@@ -126,7 +133,7 @@ export async function runTick(
   const nowMs = opts.nowMs ?? Date.now();
   const killPids = opts.killPids !== false;
   const forkTTLms = opts.forkTTLms ?? 24 * 60 * 60 * 1000;
-  const result: TickResult = { swept: 0, forksDeleted: 0, live: 0, errors: [] };
+  const result: TickResult = { swept: 0, forksDeleted: 0, logsDeleted: 0, live: 0, errors: [] };
 
   // ── Phase 1: sweep dead curators ──────────────────────────────────────
   const entries = await classifyPids(pidsDir, opts);
@@ -223,7 +230,82 @@ export async function runTick(
     }
   }
 
+  // ── Phase 3: GC old stderr logs (D11) ────────────────────────────────
+  // Same TTL as fork artifacts; recursively scans logsDir for *.stderr.
+  if (opts.logsDir) {
+    let logFiles: string[];
+    try {
+      logFiles = await collectLogFiles(opts.logsDir);
+    } catch {
+      logFiles = []; // logs dir missing/unreadable → nothing to GC
+    }
+    for (const logPath of logFiles) {
+      try {
+        const stat = opts.stat
+          ? opts.stat(logPath)
+          : await fs.promises.stat(logPath);
+        if (nowMs - stat.mtimeMs > forkTTLms) {
+          try {
+            await fs.promises.unlink(logPath);
+            result.logsDeleted += 1;
+          } catch (delErr) {
+            result.errors.push(
+              `failed to delete log ${logPath}: ${
+                delErr instanceof Error ? delErr.message : String(delErr)
+              }`,
+            );
+          }
+        }
+      } catch (statErr) {
+        result.errors.push(
+          `failed to stat log ${logPath}: ${
+            statErr instanceof Error ? statErr.message : String(statErr)
+          }`,
+        );
+      }
+    }
+  }
+
   return result;
+}
+
+/**
+ * Recursively collect all `*.stderr` file paths under `root`. Missing `root`
+ * resolves to an empty array (never throws). Used by the D11 log GC phase.
+ */
+async function collectLogFiles(root: string): Promise<string[]> {
+  const out: string[] = [];
+  let top: string[];
+  try {
+    top = await fs.promises.readdir(root);
+  } catch {
+    return [];
+  }
+  for (const entry of top) {
+    const entryPath = path.join(root, entry);
+    let st: fs.Stats;
+    try {
+      st = await fs.promises.stat(entryPath);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) {
+      // session subdirectory — scan one level deeper (matches the
+      // <logsBaseDir>/<mainSessionId>/*.stderr layout).
+      let inner: string[];
+      try {
+        inner = await fs.promises.readdir(entryPath);
+      } catch {
+        continue;
+      }
+      for (const f of inner) {
+        if (f.endsWith(".stderr")) out.push(path.join(entryPath, f));
+      }
+    } else if (entry.endsWith(".stderr")) {
+      out.push(entryPath);
+    }
+  }
+  return out;
 }
 
 export {};

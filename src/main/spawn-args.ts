@@ -14,6 +14,9 @@
  * tools). Pure.
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 import type { ResolvedPersona } from "../util/config.js";
 
 export interface BuildSpawnArgsInput {
@@ -158,6 +161,60 @@ export function buildSpawnArgs(input: BuildSpawnArgsInput): BuildSpawnArgsResult
   }
 
   return { args, taskPrompt };
+}
+
+/**
+ * Input for {@link resolveStdio} (REQ-LC-04 / design D11).
+ */
+export interface ResolveStdioInput {
+  /** Main session id that spawns the curator. */
+  mainSessionId: string;
+  /** Curator persona alias (used in the log filename). */
+  curatorAlias: string;
+  /** Explicit timestamp for the log filename (deterministic in tests). */
+  nowMs: number;
+  /**
+   * Base directory for logs. Defaults to `~/.pi-curator/logs`.
+   * The actual log file lands at
+   * `<logsBaseDir>/<mainSessionId>/<curatorAlias>-<nowMs>.stderr`.
+   */
+  logsBaseDir?: string;
+}
+
+/**
+ * Resolve the `stdio` option for `child_process.spawn` of a curator (D11).
+ *
+ * Returns `['ignore', <stdoutFd>, <stderrFd>]` where:
+ *   - `stdout` (index 1) is opened on the platform null device
+ *     (`/dev/null` on unix, `nul` on windows) so the curator's LLM response
+ *     stream is discarded — curators report findings via `signal_main`, not
+ *     stdout.
+ *   - `stderr` (index 2) is opened in append mode on
+ *     `<logsBaseDir>/<mainSessionId>/<curatorAlias>-<nowMs>.stderr` so
+ *     diagnostic noise (MCP init, deprecation warnings) is captured for
+ *     post-mortem without flooding the main TUI.
+ *
+ * Creates the logs directory (recursive) if missing. The caller owns the
+ * returned file descriptors and is responsible for closing them (the child
+ * inherits them via spawn's `stdio`, so in practice they live with the child).
+ */
+export function resolveStdio(
+  input: ResolveStdioInput,
+): ["ignore", number, number] {
+  const logsBaseDir =
+    input.logsBaseDir ??
+    path.join(os.homedir(), ".pi-curator", "logs");
+  const logDir = path.join(logsBaseDir, input.mainSessionId);
+  fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(
+    logDir,
+    `${input.curatorAlias}-${input.nowMs}.stderr`,
+  );
+
+  const stdoutFd = fs.openSync(os.devNull, "w");
+  const stderrFd = fs.openSync(logPath, "a");
+
+  return ["ignore", stdoutFd, stderrFd];
 }
 
 export {};

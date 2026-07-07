@@ -56,6 +56,11 @@ export interface TickResult {
   heartbeatAt: string;
   /** Phase after applying the optional event. */
   phase: CuratorPhase;
+  /**
+   * Curator session id pointer (LD1) carried through from opts. Undefined
+   * when no id is known (legacy / not yet stamped).
+   */
+  curatorSessionId?: string;
 }
 
 /** Injectable clock for the pure helpers (deterministic tests). */
@@ -149,12 +154,14 @@ export function phaseAtLeast(a: CuratorPhase, b: CuratorPhase): boolean {
  */
 export function tickHeartbeat(
   state: HeartbeatState,
-  opts: { nowMs: number; phaseEvent?: PhaseEvent },
+  opts: { nowMs: number; phaseEvent?: PhaseEvent; curatorSessionId?: string },
 ): TickResult {
   const phase = opts.phaseEvent ? nextPhase(state.phase, opts.phaseEvent) : state.phase;
   return {
     heartbeatAt: new Date(opts.nowMs).toISOString(),
     phase,
+    // LD1: surface the curatorSessionId pointer so the writer can stamp it.
+    curatorSessionId: opts.curatorSessionId,
   };
 }
 
@@ -181,12 +188,17 @@ export interface StartHeartbeatOpts {
   writer?: (
     pidsFile: string,
     pid: number,
-    opts: { phase?: string; nowMs?: number },
+    opts: { phase?: string; nowMs?: number; curatorSessionId?: string },
   ) => Promise<"updated" | "not_owner" | "missing">;
   /** Called when a write is swallowed (best-effort log; default noop). */
   onError?: (err: unknown) => void;
   /** Interval in ms override (else `config.intervalSec * 1000`). */
   intervalMs?: number;
+  /**
+   * Curator's own session id (LD1 pointer). Written on the heartbeat ticks so
+   * `/curator status` can link to the curator's session. Optional.
+   */
+  curatorSessionId?: string;
 }
 
 /**
@@ -229,10 +241,14 @@ export function startHeartbeat(opts: StartHeartbeatOpts): HeartbeatController {
     if (inFlight) return false; // REQ-CR: skip overlapping ticks
     inFlight = true;
     try {
-      const r = tickHeartbeat({ phase }, { nowMs: now(), phaseEvent: event });
+      const r = tickHeartbeat(
+        { phase },
+        { nowMs: now(), phaseEvent: event, curatorSessionId: opts.curatorSessionId },
+      );
       const res = await writer(opts.pidsFile, opts.pid, {
         phase: r.phase,
         nowMs: Date.parse(r.heartbeatAt),
+        curatorSessionId: r.curatorSessionId,
       });
       if (res === "updated") {
         phase = r.phase;
