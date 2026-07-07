@@ -1,0 +1,75 @@
+status: ongoing
+threads:
+  - id: OT1
+    topic: Does pi-curator ship a sophisticated logging mechanism?
+    raised_in: turn1
+    status: resolved
+    resolution: >
+      NO. No logging library, no logs/ dir, stdio is IGNORE/IGNORE/IGNORE.
+      D11 (stderr→logs) decided in design but not honored in code.
+    resolved_in: turn1
+
+  - id: OT2
+    topic: How does an operator check what ran / results for troubleshooting?
+    raised_in: turn1
+    status: resolved
+    resolution: >
+      pids/<sess>/<cur>.json gives existence + liveness + phase.
+      Curator reasoning/conclusions live in the pi session JSONL
+      (~/.pi/agent/sessions/), findable by name "curator:<alias>" via pi --resume.
+      Remaining sub-gaps tracked as OT3/OT4/OT5/OT6.
+    resolved_in: turn2
+
+  - id: OT3
+    topic: D11 stderr→logs decision not honored in spawn hook
+    raised_in: turn1
+    status: resolved
+    resolution: >
+      Tasked (bugfix). D11 is already locked upstream in design.md; code drifted.
+      No new decision needed — just honor the existing locked decision.
+    resolved_in: findings-to-workable-tasks
+    disposition: tasked
+
+  - id: OT4
+    topic: spawn-log/ dir proposed in lifecycle proposal but never built
+    raised_in: turn1
+    status: open
+    disposition: escalated
+    escalated_to: user
+    # Two valid paths (build now vs defer). Gold-plating risk vs audit value.
+    # No evidence breaks tie → STOP + ASK. (D-C in turn2.)
+
+  - id: OT5
+    topic: Full structured logging library (levels, sinks, context)
+    raised_in: turn1
+    status: deferred
+    # Tier 5. Premature. Revisit only if curators multiply.
+
+  - id: OT6
+    topic: Crosscheck suppressed findings are invisible (no suppressed.jsonl)
+    raised_in: turn1
+    status: open
+    disposition: escalated
+    escalated_to: user
+    # Conditional on user trust of first-finding-wins dedup.
+    # No evidence breaks tie → STOP + ASK. (D-D in turn2.)
+
+  - id: OT7
+    topic: Add curatorSessionId pointer to pids schema (correlation, not capture)
+    raised_in: turn2
+    status: resolved
+    resolution: >
+      Auto-decided per [LD1]. Optional field, non-breaking, ~5 lines, one-click
+      correlation. Tasked for implementation.
+    resolved_in: findings-to-workable-tasks
+    disposition: auto-decided + tasked
+
+  - id: OT8
+    topic: Formalize "black-box by design" as explicit design decision (D-E)
+    raised_in: turn2
+    status: resolved
+    resolution: >
+      Auto-decided per [LD2]. User stated posture as fact (verbatim L1).
+      Formalize in design.md to resolve D11 drift contradiction.
+    resolved_in: findings-to-workable-tasks
+    disposition: auto-decided

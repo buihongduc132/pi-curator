@@ -1,0 +1,39 @@
+{
+  "curators": {
+    "spec": {
+      "alias": "spec",
+      "enabled": true,
+      "goalFile": "defaults/goals/spec.md",
+      "spawn": {
+        "everyTurns": 5
+      },
+      "includeThinking": false,
+      "heartbeat": {
+        "intervalSec": 5,
+        "staleSec": 30,
+        "deadSec": 120
+      }
+    },
+    "scold": {
+      "alias": "scold",
+      "enabled": true,
+      "goalFile": "defaults/goals/scold.md",
+      "spawn": {
+        "everyTurns": 3
+      },
+      "includeThinking": false,
+      "heartbeat": {
+        "intervalSec": 5,
+        "staleSec": 30,
+        "deadSec": 120
+      }
+    }
+  },
+  "janitor": {
+    "enabled": true,
+    "interval": "5m",
+    "staleSec": 30,
+    "deadSec": 120,
+    "forkTTL": "24h"
+  }
+}

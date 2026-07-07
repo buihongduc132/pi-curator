@@ -1,0 +1,35 @@
+{
+  "name": "@buihongduc132/pi-curator",
+  "version": "0.1.0",
+  "description": "Curator sidecar system for pi main sessions — spawn, fork, track, GC curator sidecars",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "src/curator-receiver/index.ts",
+      "src/main/index.ts",
+      "src/main/slash-commands.ts",
+      "src/runtime/index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "files": [
+    "src/",
+    "defaults/",
+    "README.md"
+  ],
+  "keywords": [
+    "pi",
+    "curator",
+    "sidecar",
+    "review"
+  ],
+  "license": "MIT"
+}

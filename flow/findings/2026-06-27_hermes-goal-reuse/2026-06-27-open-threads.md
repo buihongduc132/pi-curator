@@ -27,10 +27,20 @@
 - **Source:** `openspec/specs/curator-signal/spec.md` (still specced, not active).
 - **Open question:** Is the marginal value of mid-loop nudges worth building, given pi-until-done already judges at completion? Unresolved.
 
+> **Verdict (auto-decided 2026-07-04):** DEFER. Don't build OT2 now.
+> Rationale: pi-until-done's completion-judge covers the high-value case (gate at done). Mid-loop nudges are speculative value with real cost (extra LLM turns, interrupt churn). Revisit ONLY if a live workflow demonstrates the gap (a real goal where mid-loop drift cost more than the nudge overhead).
+> Action: leave `curator-signal` spec archived; do not revive until demand is concrete.
+> automate decided with verdict
+
 ### OT3 — Skill/memory curation (Hermes Curator proper)
 - **Status:** Open gap. Unchanged from prior curator research.
 - **Source:** `flow/findings/curator/gap-analysis.md` — skill usage telemetry, lifecycle FSM, provenance, archive-with-recovery, pinning, background LLM skill review all missing.
 - **Note:** None of the `/goal` plugins touch skill lifecycle. This is orthogonal to the goal-judge decision.
+
+> **Verdict (auto-decided 2026-07-04):** PHASE per gap-analysis §1–6 order. Direction is already clear (gap-analysis has the build plan); no design ambiguity.
+> Sequencing: (1) Skill Usage Tracker → (2) Provenance → (3) Lifecycle FSM → (4) Archive → (5) Pin → (6) Background LLM review. Phases 1–2 are data-collection foundations that 3–6 depend on; ship 1+2 first, evaluate real usage data, THEN decide FSM thresholds.
+> Action: open first change `add-skill-usage-tracker` covering §1 only. Do NOT bundle §1–6 into one mega-change.
+> automate decided with verdict
 
 ## Sustainability / dependency risks
 
@@ -51,9 +61,18 @@
 - **Original framing:** pi-ralph-wiggum today trusts the agent's own `<promise>COMPLETE</promise>`. Adding a judge changes the trust model. Is that a real feature request?
 - **Note:** D1 (use pi-until-done) makes this moot for the goal-judge case, but the question of whether ralph-wiggum itself should grow a judge remains open.
 
+> **Verdict (auto-decided 2026-07-04):** NO (do not modify ralph-wiggum). Goal-judge is owned by pi-until-done (D1); ralph-wiggum stays a pure loop driver. If a ralph+judge need surfaces, route it through pi-until-done's authority, not into ralph-wiggum's loop primitive.
+> Action: close. Reopen only if a concrete ralph-without-until-done goal-judge use case appears.
+> automate decided with verdict
+
 ### OT7 — Same-session vs fresh sidecar for the judge
 - **Status:** Raised [T1], never answered.
 - **Original framing:** Hermes `/goal` judge runs in worker's full session context. Curator runs a fresh forked session. Which model does the goal-judge need? pi-until-done uses `pi-ai`'s `complete()` (fresh one-shot, out-of-session) [T5] — so for pi-until-done this is settled (fresh). But if D2 bakes verifier-loop in, the answer may need revisiting.
+
+> **Verdict (auto-decided 2026-07-04):** FRESH sidecar for the verifier tier (tier-2). Match pi-until-done's existing fresh-`complete()` model.
+> Rationale: the entire point of pi-until-done's cross-model judge is to escape self-talk [T5]. A same-session verifier re-reads the model's own output → self-review bias → defeats the backstop D3 mandates. Fresh sidecar = independent context, no inheritance of the worker's rationalizations.
+> Action: D2 fork MUST keep verifier tier as a fresh `complete()` call (or pi-intercom sidecar), NOT a re-prompt of the worker session.
+> automate decided with verdict
 
 ## Questions NOT resolved during explore
 
@@ -72,6 +91,11 @@
 - **Behavior difference:** under partial disagreement (1 approve, 1 reject), (a) = FAIL, (b) = NEITHER (continue). Need user clarification before D2 implementation.
 - **Default captured as:** "2 approvals required to pass". Fail-side semantics unresolved.
 
+> **Verdict (auto-decided 2026-07-04):** Option (b) — dual independent threshold.
+> Rationale: D3 mandates fail-CLOSED on indeterminate. Under ratio (a), a single reject out of 2 = hard FAIL → wastes the loop budget on one model hiccup. Dual threshold (b) keeps the loop alive on partial disagreement and only resolves when a real majority forms — better use of the max-turns budget (R4, default 20). Combined with D3: parse_error/unavailable counts toward NEITHER threshold (not auto-fail, not auto-pass).
+> Config shape: `{ passThreshold: 2, failThreshold: 2, maxTurns: 20 }`. On `maxTurns` exhausted without passThreshold met → fail-CLOSED (block).
+> automate decided with verdict
+
 ### OT10 — Verdict object fields beyond skeleton [T7]
 - **Status:** OPEN — user invited additional verifier-loop-aligned fields.
 - **Skeleton (locked R2):** `{ approval_status: APPROVE|REJECT, reason: string }`.
@@ -85,6 +109,11 @@
   - `evidence_refs[]` (what evidence the verdict cited)
   - `requires_followup` (bool — flag even on APPROVE)
 - **Resolve by:** mapping to the existing `verifier-loop` skill's verdict shape (the skill is the reference implementation — its `references/verifier.md` defines what fields a real verifier emits).
+
+> **Verdict (auto-decided 2026-07-04):** ADOPT the `verifier-loop` skill's verdict shape verbatim as the schema of record; the candidate list above is illustrative only.
+> Rationale: OT8 resolved tier-2 = self-verify via verifier-loop skill [T8]. The skill's `references/verifier.md` IS the reference implementation — re-inventing fields diverges from the canonical emitter and breaks the round-trip contract between emitter and consumer.
+> Action: D2 fork imports the verdict type from the verifier-loop skill's reference doc. No bespoke field set. If the skill's shape lacks a needed field, propose the addition TO THE SKILL (single source of truth), not a fork-local extension.
+> automate decided with verdict
 
 ## Next-step menu (when resuming)
 

@@ -143,6 +143,25 @@ export interface ReceiverPi {
 }
 
 /**
+ * Extract the {@link IncomingMessage} from a hook event that may wrap it under
+ * `.message`, or pass a bare message through unchanged. Pure.
+ *
+ * Exists because the inline `"message" in event ? event.message : event`
+ * ternary does not narrow the `{message?} | IncomingMessage` union under
+ * strict TypeScript (the interface member is not excluded from the true
+ * branch), so the helper's explicit `IncomingMessage | undefined` return type
+ * makes the unwrap total and the downstream guards effective.
+ */
+function extractMessage(
+  event: { message?: IncomingMessage } | IncomingMessage,
+): IncomingMessage | undefined {
+  if (event && typeof event === "object" && "message" in event) {
+    return (event as { message?: IncomingMessage }).message;
+  }
+  return event as IncomingMessage;
+}
+
+/**
  * Full incoming-message pipeline (tasks 2.3, 3.1, 3.2, 3.3, 2.4). Wires the
  * pure helpers together:
  * 1. Sender filter (REQ-SG-03): drop non-curator senders.
@@ -164,8 +183,11 @@ export function processIncoming(
   // re-throw, never block the main turn, never crash the main session).
   // A malformed curator signal is dropped after logging, not fatal.
   try {
-    // Extract the message from the event wrapper if present.
-    const message = "message" in event ? event.message : event;
+    // Extract the message from the event wrapper if present. The inline
+    // `"message" in event ? event.message : event` ternary does NOT narrow
+    // the `{message?} | IncomingMessage` union under strict TS; the typed
+    // helper's explicit return type makes the unwrap total.
+    const message = extractMessage(event);
     if (!message) return false;
 
     // 1. Sender filter (REQ-SG-03) — match sender, NOT customType.

@@ -1,0 +1,50 @@
+# Locked decisions — curator-observability explore
+# Source: flow/findings/curator-observability/ (2026-07-07 explore)
+# User-locked: NONE (user surfaced D-A..D-E but never said yes/pick).
+# Auto-decided below: 2 entries. Flagged auto_decided: true — challenge freely.
+# IMMUTABLE after this point. Future proposals MUST cite [LDx].
+
+- id: LD1
+  turn: turn2
+  parts: ["Tier 1 — One missing pointer"]
+  user_quote: "auto-decided (no explicit user lock)"
+  decision: >
+    Add optional `curatorSessionId` field to CuratorClaim (pids schema).
+    Write back on first curator heartbeat. Non-breaking (missing = legacy).
+  status: locked
+  auto_decided: true
+  resolves: OT7
+  tradeoff: |
+    Optional pointer field (~5 lines, one-click jump pids → full session JSONL)
+    vs status quo (hunt by name "curator:<alias>" + timestamp via pi --resume).
+    Pointer wins decisively on cost/value: non-breaking (optional field =
+    no migration), tiny code, eliminates the only correlation gap. Resolves OT7.
+  evidence:
+    - turn2 "What's ACTUALLY still dark" — row "WHICH session is curator X?"
+    - references.md: src/util/team-attach-claim.ts (CuratorClaim shape, no field)
+
+- id: LD2
+  turn: turn2
+  parts: ["user assertion (verbatim)", "Assistant read"]
+  user_quote: |
+    "currently we are keeping the curator is to be blackbox , we always be able
+    to read the pi session data in the ~/.pi anyway"
+  decision: >
+    Formalize "curator is black-box by design" as explicit design decision.
+    Observability posture = pi session store (reasoning) + pids correlation
+    (LD1 pointer) + stderr crash-catch (D11). NOT a full logging library.
+  status: locked
+  auto_decided: true
+  resolves: OT8
+  tradeoff: |
+    Formalize as design decision (turns D11 drift into principled stance; sets
+    floor = LD1 pointer + D11 stderr; prevents future "why can't I debug X")
+    vs leave implicit (code says black-box, design.md D11 says stderr→logs —
+    that contradiction IS the bug). User stated posture as fact (verbatim L1),
+    so formalizing matches stated intent. The floor explicitly INCLUDES D11
+    stderr capture because user's "~/.pi" argument does NOT cover the one edge
+    case where no session exists (pre-write crash).
+  evidence:
+    - turn2 [user] verbatim assertion
+    - turn2 "Assistant read" (T1+T2 = floor)
+    - references.md: design.md D11 (stderr→logs already locked upstream)
