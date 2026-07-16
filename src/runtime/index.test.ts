@@ -36,7 +36,7 @@ vi.mock("./heartbeat.js", () => ({
   createBeforeExitHandler: vi.fn(() => vi.fn(async () => undefined)),
 }));
 
-import curatorRuntimeExtension, { ENV } from "./index.js";
+import curatorRuntimeExtension, { ENV, MAIN_EXTENSION_LOADED_FLAG } from "./index.js";
 import {
   startHeartbeat,
   createBeforeExitHandler,
@@ -170,5 +170,60 @@ describe("curatorRuntimeExtension — heartbeat production wiring", () => {
     expect(onSpy).not.toHaveBeenCalled();
 
     onSpy.mockRestore();
+  });
+});
+
+// ─── REQ-CR-06 defensive check: warn if main-side extension is loaded ────────
+
+describe("curatorRuntimeExtension — REQ-CR-06 defensive check (D8)", () => {
+  it("warns when the main-side extension env flag is present", () => {
+    const prev = process.env[MAIN_EXTENSION_LOADED_FLAG];
+    process.env[MAIN_EXTENSION_LOADED_FLAG] = "1";
+    try {
+      setCuratorEnv({});
+      const notify = vi.fn();
+      const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+
+      curatorRuntimeExtension(makePi() as any, {
+        ...makeCtx("ses_d8"),
+        ui: { notify },
+      } as any);
+
+      expect(notify).toHaveBeenCalledWith(
+        expect.stringMatching(/main-side pi-curator extension detected/),
+        "warn",
+      );
+
+      onSpy.mockRestore();
+    } finally {
+      if (prev === undefined) delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+      else process.env[MAIN_EXTENSION_LOADED_FLAG] = prev;
+    }
+  });
+
+  it("does NOT warn when the flag is absent (normal operation)", () => {
+    const prev = process.env[MAIN_EXTENSION_LOADED_FLAG];
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    try {
+      setCuratorEnv({});
+      const notify = vi.fn();
+      const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+
+      curatorRuntimeExtension(makePi() as any, {
+        ...makeCtx("ses_normal"),
+        ui: { notify },
+      } as any);
+
+      // The REQ-CR-06 main-side warning MUST NOT fire in normal operation.
+      // (Other unrelated warnings, e.g. pi-intercom absent, may fire.)
+      const mainSideWarnings = notify.mock.calls.filter(
+        (c) => typeof c[0] === "string" && /main-side pi-curator extension detected/.test(c[0]),
+      );
+      expect(mainSideWarnings).toHaveLength(0);
+
+      onSpy.mockRestore();
+    } finally {
+      if (prev !== undefined) process.env[MAIN_EXTENSION_LOADED_FLAG] = prev;
+    }
   });
 });

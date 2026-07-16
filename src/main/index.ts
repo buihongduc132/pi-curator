@@ -32,17 +32,73 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 import { filterSession, parseSession } from "../util/filter-session.js";
 import { trimSessionEntries, computeBudget } from "../util/trim-session.js";
 import { getCachedConfig, enabledPersonas, type ResolvedPersona } from "../util/config.js";
 import { evaluateSpawnGate } from "./spawn-gate.js";
 import { buildSpawnArgs, resolveStdio } from "./spawn-args.js";
-import { defaultPidRoot, curatorClaimFile, acquireCuratorClaim, heartbeatCuratorClaim } from "../util/team-attach-claim.js";
+import {
+  defaultPidRoot,
+  curatorClaimFile,
+  acquireCuratorClaim,
+  seedCuratorPid,
+} from "../util/team-attach-claim.js";
 import { readPidEntries, summarizeLiveness, formatLivenessStatus } from "../util/staleness.js";
 
 const DEFAULT_PI_BIN = "pi";
 const DEFAULT_FORK_ROOT = () => path.join(os.homedir(), ".pi-curator", "forks");
+
+/**
+ * Env flag set by the main-side pi-curator extension when it loads in this
+ * process. The curator runtime reads it to detect the misconfiguration where
+ * the main-side extension is also loaded in a curator child (REQ-CR-06
+ * defensive check). It is stripped from the spawn env (see {@link
+ * buildChildEnv}) so a correctly-spawned curator child never inherits it.
+ */
+export const MAIN_EXTENSION_LOADED_FLAG = "PI_CURATOR_MAIN_EXTENSION_LOADED";
+
+const _moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Resolve the curator-runtime extension entry path (REQ-CR-06). The runtime
+ * lives at `src/runtime/index.ts` relative to this `src/main` directory when
+ * the package is consumed from source; falls back to the compiled `dist/`
+ * layout when present.
+ */
+export function resolveRuntimeExtensionPath(here: string = _moduleDir): string {
+  const srcCandidate = path.resolve(here, "..", "runtime", "index.ts");
+  if (fs.existsSync(srcCandidate)) return srcCandidate;
+  const distCandidate = path.resolve(here, "..", "runtime", "index.js");
+  return distCandidate;
+}
+
+/**
+ * Resolve the pi-intercom extension entry path (REQ-CR-06). Best-effort: env
+ * override → package resolution → node_modules probe. Returns `undefined`
+ * when no install is discoverable so the caller can surface a clear error.
+ */
+export function resolveIntercomExtensionPath(): string | undefined {
+  if (process.env.PI_INTERCOM_EXTENSION_PATH) return process.env.PI_INTERCOM_EXTENSION_PATH;
+  try {
+    const require = createRequire(import.meta.url);
+    const resolved = require.resolve("pi-intercom");
+    if (typeof resolved === "string" && resolved.length > 0) return resolved;
+  } catch {
+    // not resolvable via Node resolution — fall through to the probe.
+  }
+  // Walk up from this module looking for node_modules/pi-intercom.
+  const probes = [
+    path.resolve(_moduleDir, "..", "..", "node_modules", "pi-intercom", "index.ts"),
+    path.resolve(_moduleDir, "..", "..", "node_modules", "pi-intercom", "index.js"),
+  ];
+  for (const p of probes) {
+    if (fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
 
 type AnyPi = any;
 type AnyCtx = any;
@@ -61,6 +117,79 @@ function safeSetStatus(ctx: AnyCtx, status: string): void {
   } catch {
     // swallow
   }
+}
+
+/**
+ * Read the persona goalFile contents (D7). Returns "" on any failure
+ * (missing/unreadable file) so the spawn never blocks on a goal read.
+ */
+function readGoalContents(goalFile: string | undefined): string {
+  if (!goalFile) return "";
+  try {
+    return fs.readFileSync(goalFile, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Build the curator child process env (D4). Spreads the parent env, overlays
+ * the curator identity so {@link readCuratorIdentity} in the runtime succeeds,
+ * and STRIPS {@link MAIN_EXTENSION_LOADED_FLAG} so a correctly-spawned curator
+ * child (loaded with `--no-extensions`) does NOT carry the parent's main-side
+ * marker (REQ-CR-06 defensive check).
+ */
+export function buildChildEnv(
+  personaAlias: string,
+  mainSessionId: string,
+  mainSessionName: string | undefined,
+  nowMs: number = Date.now(),
+  parentEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...parentEnv };
+  env.PI_CURATOR_ALIAS = personaAlias;
+  env.PI_CURATOR_MAIN_ID = mainSessionId;
+  env.PI_CURATOR_MAIN_NAME = mainSessionName && mainSessionName.length > 0 ? mainSessionName : mainSessionId;
+  env.PI_CURATOR_SPAWNED_AT = new Date(nowMs).toISOString();
+  // Strip the main-side marker so the child's runtime defensive check does
+  // not false-positive on an inherited flag.
+  delete env[MAIN_EXTENSION_LOADED_FLAG];
+  return env;
+}
+
+/**
+ * Process `/curator restart` markers (D6). Scans the restart-markers dir for
+ * this main session; for every marker present, resets the per-persona spawn
+ * counter (deletes the record) and removes the marker file so the curator
+ * re-spawns on the NEXT turn_end (the gate then sees turnsSince=MAX_INT).
+ */
+export function processRestartMarkers(
+  mainSessionId: string,
+  lastSpawn: Record<string, { turn: number; atMs: number }>,
+  opts: { homeDir?: string; nowMs?: number } = {},
+): string[] {
+  const homeDir = opts.homeDir ?? os.homedir();
+  const markerDir = path.join(homeDir, ".pi-curator", "restart-markers", mainSessionId);
+  let files: string[];
+  try {
+    files = fs.readdirSync(markerDir);
+  } catch {
+    return []; // dir missing — no markers.
+  }
+  const reset: string[] = [];
+  for (const file of files) {
+    if (!file.endsWith(".json")) continue;
+    const alias = file.slice(0, -".json".length);
+    try {
+      fs.unlinkSync(path.join(markerDir, file));
+    } catch {
+      // non-fatal — best-effort delete.
+    }
+    // Reset the spawn counter for this alias (gate re-evaluates next turn).
+    delete lastSpawn[alias];
+    reset.push(alias);
+  }
+  return reset;
 }
 
 /**
@@ -115,11 +244,23 @@ export async function handleTurnEnd(
     piBin?: string;
     pidRoot?: string;
     forksDir?: string;
+    // Path to the curator-runtime extension entry (REQ-CR-06). Defaults to the
+    // sibling `src/runtime/index.ts` (or `dist/runtime/index.js` if compiled).
+    runtimeExtensionPath?: string;
+    // Path to the pi-intercom extension entry (REQ-CR-06). Defaults to env or
+    // package resolution. If unresolvable, buildSpawnArgs will throw.
+    intercomExtensionPath?: string;
     // Test seam: injected spawn (default real child_process.spawn).
     spawnFn?: typeof spawn;
     // Per-persona spawn counters (mutated in place).
     lastSpawn?: Record<string, { turn: number; atMs: number }>;
     turnNumber?: number;
+    // Test seam: explicit parent env (default process.env).
+    parentEnv?: NodeJS.ProcessEnv;
+    // Test seam: explicit home dir for restart-marker processing.
+    homeDir?: string;
+    // Test seam: explicit now for deterministic timestamps.
+    nowMs?: number;
   },
 ): Promise<void> {
   const projectRoot = deps.projectRoot;
@@ -131,6 +272,23 @@ export async function handleTurnEnd(
   const spawnFn = deps.spawnFn ?? spawn;
   const turnNumber = deps.turnNumber ?? 0;
   const lastSpawn = deps.lastSpawn ?? {};
+  const parentEnv = deps.parentEnv ?? process.env;
+  const homeDir = deps.homeDir ?? os.homedir();
+  const nowMs = deps.nowMs ?? Date.now();
+  const runtimeExtensionPath = deps.runtimeExtensionPath ?? resolveRuntimeExtensionPath();
+  const intercomExtensionPath = deps.intercomExtensionPath ?? resolveIntercomExtensionPath();
+
+  // D6: Process any `/curator restart` markers BEFORE evaluating the spawn gate.
+  // Resetting lastSpawn[alias] makes the gate see turnsSince=MAX_INT, so the
+  // curator re-spawns on this turn_end.
+  try {
+    const resetAliases = processRestartMarkers(mainSessionId, lastSpawn, { homeDir, nowMs });
+    if (resetAliases.length > 0) {
+      safeNotify(ctx, `curator: restart markers cleared for ${resetAliases.join(", ")}`, "info");
+    }
+  } catch {
+    // non-fatal — gate evaluation proceeds.
+  }
 
   // 1. Load config (cached, never throws).
   let loaded;
@@ -188,10 +346,22 @@ export async function handleTurnEnd(
       continue;
     }
 
-    // Build argv + spawn (REQ-LC-04, detached:false).
+    // D7: read the persona's goalFile contents so the task prompt is real text.
+    const goalContents = readGoalContents(persona.goalFile);
+
+    // Build argv + spawn (REQ-LC-04, REQ-CR-06, detached:false).
     let args;
     try {
-      args = buildSpawnArgs({ persona, filteredJsonlPath: forkPath, mainSessionId, mainSessionName, piBin });
+      args = buildSpawnArgs({
+        persona,
+        filteredJsonlPath: forkPath,
+        mainSessionId,
+        mainSessionName,
+        piBin,
+        runtimeExtensionPath,
+        intercomExtensionPath,
+        goalContents,
+      }).args;
     } catch (err) {
       safeNotify(ctx, `curator: argv build failed for ${persona.alias}: ${err instanceof Error ? err.message : String(err)}`, "error");
       continue;
@@ -208,18 +378,26 @@ export async function handleTurnEnd(
           curatorAlias: persona.alias,
           nowMs: Date.now(),
         }),
+        // D4: inject curator identity into the child env so the runtime can
+        // readCuratorIdentity() and signal back to the right main session.
+        env: buildChildEnv(persona.alias, mainSessionId, mainSessionName, nowMs, parentEnv),
       });
     } catch (err) {
       safeNotify(ctx, `curator: spawn failed for ${persona.alias}: ${err instanceof Error ? err.message : String(err)}`, "error");
       continue;
     }
 
-    // Update the claim with the real child pid + phase "spawned" (REQ-LC-05).
+    // D2: hand off the claim pid from the placeholder (main pid) to the REAL
+    // child pid. This MUST NOT perform an ownership check — main just acquired
+    // the slot, so it is the legitimate owner. Without this, the runtime's own
+    // heartbeat(child.pid) would return `not_owner` and HALT.
     if (child?.pid) {
       try {
-        await heartbeatCuratorClaim(claimPath, child.pid, { phase: "spawned" });
+        await seedCuratorPid(claimPath, child.pid, { phase: "spawned", nowMs });
       } catch {
-        // non-fatal — claim already written with placeholder pid
+        // non-fatal — claim already written with placeholder pid; next
+        // heartbeat may fail if this seed is missing, but the hook stays
+        // non-blocking.
       }
     }
 
@@ -248,6 +426,11 @@ export async function handleTurnEnd(
  * delegates to {@link handleTurnEnd}. Wrapped in try/catch (REQ-LC-10).
  */
 export default function curatorMainExtension(pi: AnyPi, _ctx?: AnyCtx): void {
+  // D8: mark this process as running the main-side pi-curator extension. The
+  // curator runtime strips this from the child env; it only stays true in a
+  // misconfigured process where the main-side extension is also loaded.
+  process.env[MAIN_EXTENSION_LOADED_FLAG] = "1";
+
   // Per-session spawn counters (turn → atMs). Held in module scope so the hook
   // closure mutates them across turns.
   const lastSpawn: Record<string, { turn: number; atMs: number }> = {};
@@ -263,6 +446,18 @@ export default function curatorMainExtension(pi: AnyPi, _ctx?: AnyCtx): void {
       const sessionJsonlPath =
         ctx?.sessionFile ?? ctx?.session?.file ?? path.join(projectRoot, ".pi", "session.jsonl");
 
+      // Pre-resolve extension paths once per hook invocation (REQ-CR-06).
+      const runtimeExtensionPath = resolveRuntimeExtensionPath();
+      const intercomExtensionPath = resolveIntercomExtensionPath();
+      if (!intercomExtensionPath) {
+        safeNotify(
+          ctx,
+          "curator: pi-intercom extension path not found; curator spawn skipped",
+          "error",
+        );
+        return;
+      }
+
       await handleTurnEnd(pi, ctx, {
         projectRoot,
         mainSessionId,
@@ -270,6 +465,8 @@ export default function curatorMainExtension(pi: AnyPi, _ctx?: AnyCtx): void {
         sessionJsonlPath,
         lastSpawn,
         turnNumber: turnCounter,
+        runtimeExtensionPath,
+        intercomExtensionPath,
       });
     } catch (err) {
       // REQ-LC-10: NEVER let the hook crash the main turn.

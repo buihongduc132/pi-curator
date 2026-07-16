@@ -29,6 +29,22 @@ export interface BuildSpawnArgsInput {
   mainSessionName?: string;
   /** Path to the `pi` binary (default "pi"). */
   piBin?: string;
+  /**
+   * Path to the curator-runtime extension entry (REQ-CR-01 / REQ-CR-06).
+   * Loaded as the sole runtime extension via `-e <runtime>`. REQUIRED.
+   */
+  runtimeExtensionPath: string;
+  /**
+   * Path to the pi-intercom extension entry (REQ-CR-06). Loaded as the second
+   * runtime extension via `-e <intercom>`. REQUIRED.
+   */
+  intercomExtensionPath: string;
+  /**
+   * Literal contents of the persona goalFile, injected into the task prompt as
+   * `<goalContents>` (REQ-CR-08 / D7). When omitted, the placeholder collapses
+   * to empty. The caller reads the file before calling (needs fs); kept pure here.
+   */
+  goalContents?: string;
 }
 
 export interface BuildSpawnArgsResult {
@@ -119,7 +135,15 @@ export function resolveTaskPrompt(
  * Pure.
  */
 export function buildSpawnArgs(input: BuildSpawnArgsInput): BuildSpawnArgsResult {
-  const { persona, filteredJsonlPath, mainSessionId, mainSessionName } = input;
+  const {
+    persona,
+    filteredJsonlPath,
+    mainSessionId,
+    mainSessionName,
+    runtimeExtensionPath,
+    intercomExtensionPath,
+    goalContents = "",
+  } = input;
   const piBin = input.piBin ?? "pi";
 
   // REQ-CF mutual exclusion: both set is a config error. We DO NOT silently
@@ -130,7 +154,25 @@ export function buildSpawnArgs(input: BuildSpawnArgsInput): BuildSpawnArgsResult
     );
   }
 
+  // REQ-CR-06 / REQ-CR-01: the curator child is spawned with `--no-extensions`
+  // (FIRST) so it loads NO settings.json extensions — this prevents recursion
+  // (the curator's own turn_end would otherwise spawn sub-curators). Then load
+  // the runtime + intercom as the ONLY two extensions via `-e`.
+  if (!runtimeExtensionPath) {
+    throw new Error(
+      `buildSpawnArgs: runtimeExtensionPath is required (REQ-CR-06)`,
+    );
+  }
+  if (!intercomExtensionPath) {
+    throw new Error(
+      `buildSpawnArgs: intercomExtensionPath is required (REQ-CR-06)`,
+    );
+  }
+
   const args: string[] = [];
+  args.push("--no-extensions");
+  args.push("-e", runtimeExtensionPath);
+  args.push("-e", intercomExtensionPath);
   args.push("--fork", filteredJsonlPath);
 
   if (persona.goalFile) {
@@ -146,11 +188,9 @@ export function buildSpawnArgs(input: BuildSpawnArgsInput): BuildSpawnArgsResult
   const taskPrompt = resolveTaskPrompt(persona, {
     mainSessionId,
     mainSessionName,
-    // Goal contents are read by the caller (needs fs); here we pass empty so
-    // the placeholder collapses cleanly. Callers that want real goal contents
-    // in the prompt should call resolveTaskPrompt themselves and pass via a
-    // pre-resolved `taskPrompt`. For the default template we still inject it.
-    goalContents: "",
+    // D7: real goalFile contents (read by the caller before calling this pure
+    // function). Falls back to empty so the placeholder collapses cleanly.
+    goalContents,
   });
   args.push("-p", taskPrompt);
 

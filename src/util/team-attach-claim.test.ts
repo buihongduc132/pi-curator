@@ -10,8 +10,19 @@
  *
  * See: flow/findings/curator-observability/2026-07-07-locked-decisions.yaml LD1.
  */
-import { describe, it, expect } from "vitest";
-import { parseCuratorClaim, type CuratorClaim } from "./team-attach-claim.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
+import {
+  parseCuratorClaim,
+  acquireCuratorClaim,
+  seedCuratorPid,
+  readCuratorClaim,
+  curatorClaimFile,
+  defaultPidRoot,
+  type CuratorClaim,
+} from "./team-attach-claim.js";
 
 // ─── Test helpers ───────────────────────────────────────────────────────────
 
@@ -100,5 +111,84 @@ describe("parseCuratorClaim — curatorSessionId preservation (LD1)", () => {
     expect(legacy).not.toBeNull();
     expect(legacy!.pid).toBe(4242);
     expect(legacy!.curator).toBe("spec");
+  });
+});
+
+// ─── seedCuratorPid (BLOCKER D2 PID handoff) ────────────────────────────────
+
+describe("seedCuratorPid (D2 — force-write child pid without ownership check)", () => {
+  let tmpRoot: string;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "curator-seed-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("overwrites the placeholder main pid with the real child pid", async () => {
+    const claimPath = curatorClaimFile(tmpRoot, "ses_main", "spec");
+    // Acquire with the MAIN pid as placeholder.
+    await acquireCuratorClaim(claimPath, {
+      pid: 11111,
+      mainSessionId: "ses_main",
+      curator: "spec",
+      nowMs: NOW,
+    });
+
+    const childPid = 99999;
+    const result = await seedCuratorPid(claimPath, childPid, { phase: "spawned", nowMs: NOW + 1000 });
+
+    expect(result).toBe("seeded");
+    const seeded = await readCuratorClaim(claimPath);
+    expect(seeded).not.toBeNull();
+    // The pid MUST now be the child pid, NOT the main placeholder.
+    expect(seeded!.pid).toBe(childPid);
+    expect(seeded!.pid).not.toBe(11111);
+    expect(seeded!.phase).toBe("spawned");
+    // heartbeatAt refreshed.
+    expect(seeded!.heartbeatAt).toBe(new Date(NOW + 1000).toISOString());
+  });
+
+  it("does NOT perform an ownership check (D2 — main just acquired the slot)", async () => {
+    const claimPath = curatorClaimFile(tmpRoot, "ses_main", "spec");
+    // Acquire with main pid 11111; the child pid 99999 is DIFFERENT.
+    await acquireCuratorClaim(claimPath, {
+      pid: 11111,
+      mainSessionId: "ses_main",
+      curator: "spec",
+      nowMs: NOW,
+    });
+    // seedCuratorPid must succeed even though pid mismatches the placeholder.
+    const result = await seedCuratorPid(claimPath, 99999);
+    expect(result).toBe("seeded");
+    const seeded = await readCuratorClaim(claimPath);
+    expect(seeded!.pid).toBe(99999);
+  });
+
+  it("returns 'missing' when the claim file does not exist", async () => {
+    const claimPath = curatorClaimFile(tmpRoot, "ses_main", "absent");
+    const result = await seedCuratorPid(claimPath, 12345);
+    expect(result).toBe("missing");
+  });
+
+  it("preserves all other claim fields (mainSessionId, curator, goalFile, ...)", async () => {
+    const claimPath = curatorClaimFile(tmpRoot, "ses_main", "spec");
+    await acquireCuratorClaim(claimPath, {
+      pid: 11111,
+      mainSessionId: "ses_main",
+      curator: "spec",
+      mainSessionName: "main",
+      goalFile: "/goals/spec.md",
+      nowMs: NOW,
+    });
+    await seedCuratorPid(claimPath, 99999, { nowMs: NOW + 5000 });
+    const seeded = await readCuratorClaim(claimPath);
+    expect(seeded!.mainSessionId).toBe("ses_main");
+    expect(seeded!.curator).toBe("spec");
+    expect(seeded!.mainSessionName).toBe("main");
+    expect(seeded!.goalFile).toBe("/goals/spec.md");
+    expect(seeded!.pid).toBe(99999);
   });
 });
