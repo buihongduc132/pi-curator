@@ -1,75 +1,55 @@
 # pi-curator mutator-guard enrollment result
 
-> Last re-run: 2026-07-16 19:08 UTC (main `ff22d84`, post production-wiring PR #3 + REQ-SG-08 + 3 survivor-remediation PRs #4/#5/#6).
+> Last re-run: 2026-07-16 20:50 UTC (main `0e64db9`, 892 tests, post 5 survivor-remediation PRs #4-#9).
 > Tool: stryker (mutator-guard sidecar at `.mutator-rules/stryker/`).
 
 ## Headline
 
 **enrolled:** Y
 
-**score:** 85.62% (detectable-only) — stryker headline 77.62% (incl. NoCoverage)
+**score:** 88.99% (detectable-only) — stryker headline 88.35%
 
-**states:** killed=1971 survived=315 timeout=16 error=0 ignored=945
+**states:** killed=2256 survived=259 timeout=20 error=0 ignored=732
 
-**threshold:** 95% (break: 95, low: 95, high: 95) — still below threshold; residual plan below.
+**threshold:** 95% — still below; final remediation round in progress (PRs pending).
 
 **reports:**
 - normalized: `components/mutator-guard/reports/pi-curator/typescript/mutation.json` (guard-orches)
 - raw stryker: `reports/mutation/mutation.json` (gitignored, regenerable via `.mutator-rules/stryker/run.sh`)
+- mutator-guard enrollment config: landed via mutator-guard PR #29 (merged to mutator-guard main)
 
-## Progress (74.11% → 85.62%)
+## Progress (63.95% → 88.35% headline)
 
-Three survivor-remediation sub-agent rounds killed **238 survivors** (553→315) by adding **237 targeted unit tests** (total suite 678, was 481):
+Five survivor-remediation sub-agent rounds killed **294 survivors** (553→259) by adding **445 targeted unit tests** (total suite 892, was 447):
 
-| round | PR | cluster | score delta | survivors killed |
-|------:|----|--------|-------------|-----------------:|
-| 1 | #5 | util (config/filter/trim) | 74.11→ (util 91.85%) | ~167 |
-| 1 | #4 | wiring (main/runtime/receiver) | — | ~77 |
-| 2 | #6 | janitor (janitor/run-tick) | janitor 39→82%, run-tick 77→88% | 63 |
+| round | PR | cluster | result |
+|------:|----|--------|--------|
+| 1 | #5 | util (config/filter/trim) | config 76→97.5%, filter 69→93.9%, trim 75→94.5% |
+| 1 | #4 | wiring (main/runtime/receiver) | main 53→84%, runtime/index 36→88.6%, receiver 70→89.4% |
+| 2 | #6 | janitor | janitor 39→81.8%, run-tick 77→96.4% |
+| 3 | #7 | crosscheck+receiver | crosscheck 78→92.6%, finding 86→95.2%, mailbox 56→87.5%, receiver-index 33→77.4% |
+| 3 | #8 | runtime | signal-main 86.7→**100%**, heartbeat 72.7→93.3%, team-attach 88.9→95.7% |
+| 3 | #9 | main+fs-lock | fs-lock 55→67.1%, slash-commands 90→74.9% (more NoCoverage surfaced) |
 
-## Per-file summary (final, survivors descending)
+## Files at/above 95% (achieved)
 
-| file | score | killed | survived |
-|------|------:|-------:|---------:|
-| `src/main/index.ts` | 74.83 | 110 | 37 |
-| `src/runtime/index.ts` | 73.68 | 84 | 30 |
-| `src/runtime/heartbeat.ts` | 72.73 | 64 | 24 |
-| `src/crosscheck/crosscheck.ts` | 77.78 | 84 | 24 |
-| `src/util/fs-lock.ts` | 55.00 | 33 | 25 |
-| `src/curator-receiver/curator-receiver.ts` | 86.11 | 155 | 25 |
-| `src/util/team-attach-claim.ts` | 88.89 | 144 | 18 |
-| `src/curator-receiver/index.ts` | 33.33 | 8 | 16 |
-| `src/crosscheck/mailbox.ts` | 56.25 | 18 | 14 |
-| `src/runtime/signal-main.ts` | 86.67 | 91 | 14 |
-| `src/crosscheck/finding.ts` | 86.41 | 89 | 14 |
-| `src/main/slash-commands.ts` | 90.48 | 114 | 12 |
-| `src/janitor/pi-curator-janitor.ts` | 81.82 | — | ~12 |
-| `src/janitor/run-tick.ts` | 87.60 | — | ~8 |
-| `src/util/filter-session.ts` | 93.91 | 183 | 12 |
-| `src/util/trim-session.ts` | 94.54 | 172 | 10 |
-| `src/util/config.ts` | 97.54 | 267 | 7 |
-| `src/util/staleness.ts` | 88.89 | 48 | 6 |
-| `src/main/spawn-args.ts` | 90.74 | 49 | 5 |
-| `src/main/spawn-gate.ts` | 90.70 | 39 | 4 |
-| `src/util/heartbeat-lease.ts` | 94.44 | 51 | 3 |
+`src/runtime/signal-main.ts` (100%), `src/util/config.ts` (97.5%), `src/janitor/run-tick.ts` (96.4%), `src/crosscheck/finding.ts` (95.2%), `src/util/team-attach-claim.ts` (95.7%).
 
-## Status
+## Remaining survivors (final round in progress)
 
-- ✅ Enrollment + sidecar deploy + config committed (mutator-guard branch `enroll/pi-curator`, guard-orches branch `enroll/pi-curator-mutation` — NOT merged to either main, left for review per guard-orches working rules).
-- ✅ Mutation test runs clean (678/678 baseline green; initial dry run succeeds; ~5min full run).
-- ✅ Three survivor-remediation rounds delegated + merged (PRs #4, #5, #6). Score 74.11% → 85.62%; survivors 553 → 315.
-- ⚠️ **Score 85.62% — below 95% threshold.** 315 survivors remain, concentrated in adapter/wiring files that are inherently harder to mutation-test without a live pi binary (process spawning, intercom broker, UI surfaces).
+| file | score | survived | ignored |
+|------|------:|---------:|--------:|
+| `src/main/slash-commands.ts` | 74.88 | 51 | 107 |
+| `src/util/fs-lock.ts` | 67.08 | 47 | 27 |
+| `src/main/index.ts` | 84.09 | 28 | 81 |
+| `src/curator-receiver/curator-receiver.ts` | 89.44 | 19 | 64 |
+| `src/runtime/index.ts` | 88.60 | 13 | 26 |
+| `src/util/filter-session.ts` | 92.89 | 12 | 26 |
+| `src/janitor/pi-curator-janitor.ts` | 83.78 | 11 | 18 |
+| (others ≤10 each) | | | |
 
-## Residual remediation plan (next-round priority — survivor count desc)
+## Re-run
 
-1. `src/main/index.ts` (37) — handleTurnEnd remaining error/spawn-fn branches.
-2. `src/runtime/index.ts` (30) — runtime entry intercom-client/fallback branches.
-3. `src/runtime/heartbeat.ts` (24) — tick loop not_owner/missing/updated branches.
-4. `src/crosscheck/crosscheck.ts` (24) — cross-check protocol branches.
-5. `src/util/fs-lock.ts` (25, but 101 NoCoverage) — withLock contention; mostly coverage gaps.
-6. `src/curator-receiver/curator-receiver.ts` (25) — processIncoming remaining paths.
-7. `src/main/slash-commands.ts` (12, 87 NoCoverage) — command handlers; mostly coverage gaps.
-
-> **Note on the 95% target:** many remaining survivors are in pi-extension adapters that exercise `child_process.spawn`, the pi-intercom broker, and `ctx.ui` — surfaces that require either a real pi binary or heavy mocking. Some are equivalent mutants (e.g. logging-string changes). Reaching 95% here is feasible but represents a dedicated multi-round testing investment beyond this session. The enrollment + measurement + remediation loop is fully operational; the threshold can be re-baselined or pursued incrementally.
-
-> Full per-survivor detail (line + mutator + replacement) in the raw stryker report `reports/mutation/mutation.json` → `byFile[].survivors[]`. Re-run: `MUTATOR_GUARD_ROOT=../guard-orches/components/mutator-guard bash .mutator-rules/stryker/run.sh`.
+```bash
+MUTATOR_GUARD_ROOT=../guard-orches/components/mutator-guard bash .mutator-rules/stryker/run.sh
+```
