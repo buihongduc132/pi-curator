@@ -1,0 +1,18 @@
+{
+  "hash": "071626-cd0bcbe0",
+  "fullDigest": "cd0bcbe0c7be909113670d3291346c9163284ee9b73845ef3b383ea22bde09be",
+  "goalId": "97b6556a-d959-4258-84b1-ab990699e533",
+  "roundNumber": 3,
+  "matchedAt": "2026-07-16T09:52:26.604512891+00:00",
+  "matchingVerdicts": [
+    {
+      "verifierId": "v1",
+      "registeredAt": "2026-07-16T09:52:17.785890142+00:00"
+    },
+    {
+      "verifierId": "v2",
+      "registeredAt": "2026-07-16T09:52:14.208114543+00:00"
+    }
+  ],
+  "traceId": "1d69756b5a5276a8c0d1708eecde2dc9"
+}

@@ -1,0 +1,19 @@
+{
+  "goalId": "97b6556a-d959-4258-84b1-ab990699e533",
+  "goalText": "GOAL: Verify the pi-curator plugin's current functionalities are COMPLETE and CORRECT against its openspec specs.\n\nSuccess criteria (verifiers MUST independently run commands + read code, zero trust):\n1. `npm run typecheck` (tsc --noEmit) exits 0.\n2. `npx vitest run` reports 0 failures (baseline 447 tests across 21 files).\n3. curator-config spec (openspec/specs/curator-config/spec.md): layered merge defaults<-global<-project (src/util/config.ts), persona schema validation, alias rules — covered by src/util/config.test.ts.\n4. curator-lifecycle spec: spawn trigger + spawn gate (src/main/spawn-gate.ts, src/main/index.ts), non-bias context filter (src/util/filter-session.ts), context trim (src/util/trim-session.ts), PID file + staleness (src/util/staleness.ts, src/util/heartbeat-lease.ts), exclusivity.\n5. curator-runtime spec: heartbeat loop + phase transitions (src/runtime/heartbeat.ts, src/runtime/index.ts), beforeExit non-throwing, graceful degradation when signal_main absent.\n6. curator-signal spec: signal_main tool + transport via pi-intercom broker + main-side receiver (src/crosscheck/*, src/curator-receiver/*), steer/append/severity routing.\n7. Janitor (src/janitor/*): sweeps dead curators, GCs old fork files AND old stderr logs (D11), stateless per tick.\n8. No dead code: D11 log GC wired into production entry (pi-curator-janitor.ts tickOnce logsDir), heartbeat wired into runtime/index.ts entry with curatorSessionId pointer (LD1).\n\nAPPROVE only if every spec requirement maps to implemented, tested code with zero defects. REJECT with concrete file:line evidence otherwise.",
+  "context": "pi-curator repo at /home/bhd/Documents/Projects/bhd/pi-curator, main branch, clean tree. Run npm test + tsc, read openspec/specs/* and src/.",
+  "createdAt": "2026-07-16T08:26:55.894332536+00:00",
+  "config": {
+    "n": 2,
+    "m": 2,
+    "maxTurn": 12,
+    "backend": "pi",
+    "gitDiffMaxChars": 2000,
+    "verifierTimeoutSec": 1800,
+    "verifierPromptFile": "/tmp/minimal-verifier.md",
+    "minGoalChars": 500,
+    "fileEditTimesMaxChars": 8000,
+    "contextMaxChars": 20000,
+    "promptBudgetBytes": 50000
+  }
+}

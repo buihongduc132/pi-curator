@@ -1,0 +1,22 @@
+{
+  "checks": [
+    {
+      "name": "completionExists",
+      "passed": true
+    },
+    {
+      "name": "verdictCountMatchesRequirement",
+      "passed": true
+    },
+    {
+      "name": "completionHashMatches",
+      "passed": true
+    }
+  ],
+  "hashRecomputed": "cd0bcbe0c7be909113670d3291346c9163284ee9b73845ef3b383ea22bde09be",
+  "hashStored": "cd0bcbe0c7be909113670d3291346c9163284ee9b73845ef3b383ea22bde09be",
+  "matchingVerdicts": 2,
+  "requiredM": 2,
+  "requiredN": 2,
+  "valid": true
+}
