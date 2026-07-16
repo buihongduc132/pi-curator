@@ -54,6 +54,7 @@ import {
   curatorClaimFile,
   defaultPidRoot,
 } from "../util/team-attach-claim.js";
+import { createCuratorLogger, type CuratorLogger } from "../util/logger.js";
 
 type AnyExtensionAPI = import("@mariozechner/pi-coding-agent").ExtensionAPI | any;
 type AnyExtensionContext = any;
@@ -170,23 +171,44 @@ export default function curatorRuntimeExtension(
       "warn",
     );
   }
+
+  // Runtime-side OTel logger. sessionId = main session id (per-session subdir
+  // shared with the main-side logs). scope `curator.runtime`. traceId is
+  // inherited from the spawner via PI_CURATOR_TRACE_ID if present.
+  const envTrace = process.env.PI_CURATOR_TRACE_ID;
+  const rtLog: CuratorLogger = createCuratorLogger({
+    sessionId: process.env.PI_CURATOR_MAIN_ID ?? `pid-${process.pid}`,
+    scope: "curator.runtime",
+    traceId: typeof envTrace === "string" && envTrace.length > 0 ? envTrace : undefined,
+    persistentAttrs: { pid: process.pid },
+  });
+  rtLog.info("runtime extension loaded");
+
   try {
     const identity = readCuratorIdentity();
     if (!identity) {
       // Not spawned by the curator-main hook (manual / test session). The tool
       // is intentionally NOT registered — there is no main to signal back to.
+      rtLog.warn("identity env not set; signal_main not registered");
       ctx?.ui?.notify?.(
         "curator-runtime: identity env not set — signal_main tool not registered",
         "info",
       );
       return;
     }
+    rtLog.info("identity loaded", {
+      "persona.alias": identity.curatorAlias,
+      "session.id": identity.mainSessionId,
+      "session.name": identity.mainSessionName,
+      "curator.session.id": ctx?.sessionId ?? ctx?.session?.id,
+    });
 
     const client = buildIntercomClient(ctx);
     if (!client) {
       // pi-intercom not loaded yet. We still register the tool — its execute
       // path will fall back to the findings file when send() rejects. This is
       // the correct behavior under D-H10 (intercom optional).
+      rtLog.warn("pi-intercom not found; signal_main will use findings fallback");
       ctx?.ui?.notify?.(
         "curator-runtime: pi-intercom not found — signal_main will use findings fallback",
         "warn",
@@ -200,6 +222,13 @@ export default function curatorRuntimeExtension(
         // the rejection and fall back to the findings file (REQ-SG-08).
         client: client ?? { send: async () => Promise.reject(new Error("pi-intercom not loaded")) },
         fallbackDir,
+        onLog: (level, msg, attrs) => {
+          // Route into the runtime OTel logger under a signal_main scope.
+          const sigLog = rtLog.child("signal_main", { "persona.alias": identity.curatorAlias });
+          if (level === "info") sigLog.info(msg, attrs);
+          else if (level === "warn") sigLog.warn(msg, attrs);
+          else sigLog.error(msg, attrs);
+        },
       },
       identity,
     );
@@ -207,6 +236,10 @@ export default function curatorRuntimeExtension(
     // pi ExtensionAPI.registerTool expects a pi-tool-shaped object. Our tool
     // matches the required shape (name/description/parameters/execute).
     pi.registerTool?.(tool);
+    rtLog.info("signal_main registered", {
+      "persona.alias": identity.curatorAlias,
+      target: identity.mainSessionName,
+    });
     ctx?.ui?.notify?.(
       `curator-runtime: signal_main registered (target: ${identity.mainSessionName})`,
       "info",
@@ -234,6 +267,10 @@ export default function curatorRuntimeExtension(
       pid: process.pid,
       curatorSessionId,
       onError: (err) => {
+        rtLog.warn("heartbeat write failed", {
+          "persona.alias": identity.curatorAlias,
+          error: err instanceof Error ? err.message : String(err),
+        });
         ctx?.ui?.notify?.(
           `curator-runtime: heartbeat write failed: ${
             err instanceof Error ? err.message : String(err)
@@ -242,11 +279,17 @@ export default function curatorRuntimeExtension(
         );
       },
     });
+    rtLog.info("heartbeat started", {
+      "persona.alias": identity.curatorAlias,
+      curatorSessionId: curatorSessionId ?? null,
+      pidsFile,
+    });
     // Terminal write: stamp `phase: "done"` as this curator's last act so the
     // staleness detector frees the slot immediately (vs waiting for the
     // dead-heartbeat timeout). Non-throwing per REQ-CR.
     const writeDone = createBeforeExitHandler(pidsFile, process.pid);
     process.on("beforeExit", () => {
+      rtLog.info("curator done (beforeExit)", { "persona.alias": identity.curatorAlias, phase: "done" });
       void writeDone();
     });
     ctx?.ui?.notify?.(
@@ -258,6 +301,9 @@ export default function curatorRuntimeExtension(
   } catch (err) {
     // REQ-SG-09 Exception Safety: log to UI only, never re-throw, never
     // block the curator session from loading.
+    rtLog.error("runtime setup failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     try {
       ctx?.ui?.notify?.(
         `curator-runtime: setup failed: ${err instanceof Error ? err.message : String(err)}`,
