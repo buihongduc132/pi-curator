@@ -1,0 +1,137 @@
+# pre-commit-guard 2026-07-16
+# Canonical source: scripts/pre-commit-guard
+# Installed to: .git/hooks/pre-commit
+#
+# Runs fast, deterministic pre-commit checks. Failures block the commit.
+# To audit a previous commit without committing: .git/hooks/pre-commit --replay <commit>
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+RULES_DIR="$REPO_ROOT/references"
+EXIT_CODE=0
+REPLAY_MODE=false
+REPLAY_TARGET=""
+
+usage() {
+  echo "Usage: pre-commit-guard [--replay <commit>]"
+  exit 2
+}
+
+# Parse --replay <commit>
+if [ $# -gt 0 ]; then
+  if [ "$1" = "--replay" ]; then
+    REPLAY_MODE=true
+    REPLAY_TARGET="${2:-}"
+    if [ -z "$REPLAY_TARGET" ]; then usage; fi
+  else
+    usage
+  fi
+fi
+
+# Determine scope of files to check
+if [ "$REPLAY_MODE" = true ]; then
+  # Diff of target commit against its parent
+  COMMIT_PARENT="$(git rev-parse "$REPLAY_TARGET^" 2>/dev/null || echo "")"
+  if [ -z "$COMMIT_PARENT" ]; then
+    echo "[pre-commit-guard --replay] Error: cannot find parent of $REPLAY_TARGET"
+    exit 2
+  fi
+  CHANGED_FILES="$(git diff --name-only --diff-filter=ACM "$COMMIT_PARENT..$REPLAY_TARGET" || true)"
+else
+  CHANGED_FILES="$(git diff --cached --name-only --diff-filter=ACM HEAD || true)"
+fi
+
+STAGED_TS_FILES="$(echo "$CHANGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '\.test\.ts$' | grep -v 'node_modules/' | grep -v 'dist/' || true)"
+
+print_header() {
+  if [ "$REPLAY_MODE" = true ]; then
+    echo "[pre-commit-guard --replay] Replaying rules against commit: $REPLAY_TARGET (parent: $COMMIT_PARENT)"
+  else
+    echo "[pre-commit-guard] Running pre-commit checks"
+  fi
+  echo "────────────────────────────────────────────────────────────"
+}
+
+pass() { echo "  ✓ $1"; }
+fail() { echo "  ✗ $1"; EXIT_CODE=1; }
+warn() { echo "  WARN  $1"; }
+
+# R-01: hook is executable (skipped in replay mode)
+r01_hook_executable() {
+  if [ "$REPLAY_MODE" = true ]; then return; fi
+  if [ -x "$0" ]; then
+    pass "R-01 hook-executable: pre-commit hook is executable"
+  else
+    fail "R-01 hook-executable: pre-commit hook is not executable (chmod +x .git/hooks/pre-commit)"
+  fi
+}
+
+# R-02: no .env files staged (hard fail, zero tolerance)
+r02_no_env_files() {
+  local env_files
+  env_files="$(echo "$CHANGED_FILES" | grep -E '^\.env(\.|$)' | grep -v '^\.env\.example$' || true)"
+  if [ -z "$env_files" ]; then
+    pass "R-02 no-env-files: no .env files staged"
+  else
+    fail "R-02 no-env-files: .env file(s) are staged and will not be committed.\n  → Unstage:  git reset HEAD -- $(echo "$env_files" | tr '\n' ' ')"
+  fi
+}
+
+# R-03: binary files warning
+r03_no_binary_files() {
+  local binary_files
+  binary_files="$(echo "$CHANGED_FILES" | xargs -I{} sh -c 'git cat-file -t HEAD:{} >/dev/null 2>&1 && git diff --cached --numstat HEAD -- {} | grep -E "^-\s*-" || true' 2>/dev/null || true)"
+  if [ -z "$binary_files" ]; then
+    pass "R-03 no-binary-files: no binary files staged"
+  else
+    warn "R-03 no-binary-files: binary file(s) detected:\n$binary_files"
+  fi
+}
+
+# R-04: ast / syntax check — TypeScript AST parse via tsc --noEmit
+r04_ast_syntax_check() {
+  if [ -z "$STAGED_TS_FILES" ]; then
+    pass "R-04 ast-syntax-check: no TypeScript source files staged"
+    return
+  fi
+  cd "$REPO_ROOT"
+  if npm run typecheck > /tmp/curator-precommit-tsc.log 2>&1; then
+    pass "R-04 ast-syntax-check: tsc --noEmit passed"
+  else
+    fail "R-04 ast-syntax-check: tsc --noEmit failed. Run 'npm run typecheck' to see errors.\n$(tail -n 20 /tmp/curator-precommit-tsc.log)"
+  fi
+}
+
+# R-05: ast-grep parseability — if sg config exists, ensure ast-grep can parse staged TS files
+r05_ast_grep_parseable() {
+  if [ ! -f "$REPO_ROOT/sgconfig.yml" ]; then
+    pass "R-05 ast-grep-parseable: sgconfig.yml not present, skipping ast-grep parse check"
+    return
+  fi
+  if [ -z "$STAGED_TS_FILES" ]; then
+    pass "R-05 ast-grep-parseable: no TypeScript source files staged"
+    return
+  fi
+  cd "$REPO_ROOT"
+  if sg scan $STAGED_TS_FILES > /tmp/curator-precommit-sg.log 2>&1; then
+    pass "R-05 ast-grep-parseable: ast-grep parsed all staged TS files"
+  else
+    fail "R-05 ast-grep-parseable: ast-grep could not parse some staged TS files.\n$(tail -n 20 /tmp/curator-precommit-sg.log)"
+  fi
+}
+
+print_header
+r01_hook_executable
+r02_no_env_files
+r03_no_binary_files
+r04_ast_syntax_check
+r05_ast_grep_parseable
+
+echo "────────────────────────────────────────────────────────────"
+if [ $EXIT_CODE -eq 0 ]; then
+  echo "[pre-commit-guard] All checks passed"
+else
+  echo "[pre-commit-guard] One or more checks failed — commit blocked"
+fi
+exit $EXIT_CODE
