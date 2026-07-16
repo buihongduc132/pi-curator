@@ -20,6 +20,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 
@@ -36,7 +37,13 @@ vi.mock("./heartbeat.js", () => ({
   createBeforeExitHandler: vi.fn(() => vi.fn(async () => undefined)),
 }));
 
-import curatorRuntimeExtension, { ENV, MAIN_EXTENSION_LOADED_FLAG } from "./index.js";
+import curatorRuntimeExtension, {
+  ENV,
+  MAIN_EXTENSION_LOADED_FLAG,
+  isMainExtensionLoaded,
+  readCuratorIdentity,
+  defaultFindingsDir,
+} from "./index.js";
 import {
   startHeartbeat,
   createBeforeExitHandler,
@@ -225,5 +232,343 @@ describe("curatorRuntimeExtension — REQ-CR-06 defensive check (D8)", () => {
     } finally {
       if (prev !== undefined) process.env[MAIN_EXTENSION_LOADED_FLAG] = prev;
     }
+  });
+});
+
+// ─── Mutation survivor remediation ──────────────────────────────────────
+
+describe("isMainExtensionLoaded — heuristic surface", () => {
+  afterEach(() => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+  });
+
+  it("returns true when env flag is '1'", () => {
+    process.env[MAIN_EXTENSION_LOADED_FLAG] = "1";
+    expect(isMainExtensionLoaded({}, {})).toBe(true);
+  });
+
+  it("returns true when env flag is 'true'", () => {
+    process.env[MAIN_EXTENSION_LOADED_FLAG] = "true";
+    expect(isMainExtensionLoaded({}, {})).toBe(true);
+  });
+
+  it("returns false when env flag is absent and no extension surface matches", () => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    expect(isMainExtensionLoaded({}, {})).toBe(false);
+  });
+
+  it("returns true when ctx.extensions contains a curator-main string", () => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    expect(
+      isMainExtensionLoaded({}, { extensions: ["pi-curator-main"] }),
+    ).toBe(true);
+  });
+
+  it("returns true when ctx.extensions contains a pi-curator string", () => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    expect(
+      isMainExtensionLoaded({}, { extensions: ["some-pi-curator-thing"] }),
+    ).toBe(true);
+  });
+
+  it("returns false when ctx.extensions is an array of non-matching strings", () => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    expect(
+      isMainExtensionLoaded({}, { extensions: ["unrelated", "other"] }),
+    ).toBe(false);
+  });
+
+  it("returns false when ctx.extensions is not an array", () => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    expect(isMainExtensionLoaded({}, { extensions: "pi-curator" })).toBe(false);
+  });
+
+  it("returns true when pi.extensions contains a curator-main string", () => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    expect(
+      isMainExtensionLoaded({ extensions: ["curator-main"] } as any, {}),
+    ).toBe(true);
+  });
+
+  it("returns false when pi.extensions is an array of non-matching strings", () => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    expect(
+      isMainExtensionLoaded({ extensions: ["nope"] } as any, {}),
+    ).toBe(false);
+  });
+
+  it("never throws when ctx.extensions getter throws (exception safety)", () => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+    const throwingCtx = {
+      get extensions() {
+        throw new Error("boom");
+      },
+    };
+    expect(() => isMainExtensionLoaded({}, throwingCtx)).not.toThrow();
+    expect(isMainExtensionLoaded({}, throwingCtx)).toBe(false);
+  });
+});
+
+describe("readCuratorIdentity — env completeness", () => {
+  afterEach(() => {
+    clearCuratorEnv();
+  });
+
+  it("returns the identity when all four env vars are present", () => {
+    setCuratorEnv({});
+    const id = readCuratorIdentity();
+    expect(id).toEqual({
+      curatorAlias: "spec",
+      mainSessionId: "main-abc",
+      mainSessionName: "main-session",
+      spawnedAt: "2026-07-07T00:00:00.000Z",
+    });
+  });
+
+  it("returns null when ALIAS is missing", () => {
+    setCuratorEnv({});
+    delete process.env[ENV.ALIAS];
+    expect(readCuratorIdentity()).toBeNull();
+  });
+
+  it("returns null when MAIN_ID is missing", () => {
+    setCuratorEnv({});
+    delete process.env[ENV.MAIN_ID];
+    expect(readCuratorIdentity()).toBeNull();
+  });
+
+  it("returns null when MAIN_NAME is missing", () => {
+    setCuratorEnv({});
+    delete process.env[ENV.MAIN_NAME];
+    expect(readCuratorIdentity()).toBeNull();
+  });
+
+  it("returns null when SPAWNED_AT is missing", () => {
+    setCuratorEnv({});
+    delete process.env[ENV.SPAWNED_AT];
+    expect(readCuratorIdentity()).toBeNull();
+  });
+});
+
+describe("defaultFindingsDir", () => {
+  it("places findings under <home>/.pi-curator/findings/<mainSessionId>", () => {
+    expect(defaultFindingsDir("ses-1", "/home/u")).toBe(
+      "/home/u/.pi-curator/findings/ses-1",
+    );
+  });
+});
+
+describe("curatorRuntimeExtension — wiring effects (mutation survivors)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  function baseEnv() {
+    setCuratorEnv({});
+  }
+
+  it("registers the signal_main tool via pi.registerTool", () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = makePi();
+    curatorRuntimeExtension(pi as any, makeCtx("ses_x") as any);
+    expect(pi.registerTool).toHaveBeenCalledTimes(1);
+    const tool = pi.registerTool.mock.calls[0][0];
+    expect(tool.name).toBe("signal_main");
+    onSpy.mockRestore();
+  });
+
+  it("notifies 'signal_main registered' with the target main session name", () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const notify = vi.fn();
+    curatorRuntimeExtension(makePi() as any, {
+      ...makeCtx("ses_x"),
+      ui: { notify },
+    } as any);
+    const registered = notify.mock.calls.find(
+      (c) => typeof c[0] === "string" && /signal_main registered/.test(c[0]),
+    );
+    expect(registered).toBeTruthy();
+    expect(registered![0]).toContain("main-session");
+    expect(registered![1]).toBe("info");
+    onSpy.mockRestore();
+  });
+
+  it("notifies 'heartbeat started' including the curator session id", () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const notify = vi.fn();
+    curatorRuntimeExtension(makePi() as any, {
+      ...makeCtx("ses_hb"),
+      ui: { notify },
+    } as any);
+    const hb = notify.mock.calls.find(
+      (c) => typeof c[0] === "string" && /heartbeat started/.test(c[0]),
+    );
+    expect(hb).toBeTruthy();
+    expect(hb![0]).toContain("ses_hb");
+    expect(hb![1]).toBe("info");
+    onSpy.mockRestore();
+  });
+
+  it("invokes the heartbeat onError hook into a UI warn notify", () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const notify = vi.fn();
+    curatorRuntimeExtension(makePi() as any, {
+      ...makeCtx("ses_err"),
+      ui: { notify },
+    } as any);
+    const opts = (startHeartbeat as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    opts.onError(new Error("disk full"));
+    const warn = notify.mock.calls.find(
+      (c) => typeof c[0] === "string" && /heartbeat write failed/.test(c[0]),
+    );
+    expect(warn).toBeTruthy();
+    expect(warn![0]).toContain("disk full");
+    expect(warn![1]).toBe("warn");
+    onSpy.mockRestore();
+  });
+
+  it("invokes the beforeExit writeDone handler when beforeExit fires", async () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension(makePi() as any, makeCtx("ses_done") as any);
+    const writeDone = (createBeforeExitHandler as ReturnType<typeof vi.fn>)
+      .mock.results[0]!.value as () => Promise<unknown>;
+    const registered = onSpy.mock.calls.find((c) => c[0] === "beforeExit");
+    expect(registered).toBeTruthy();
+    await registered![1]();
+    expect(writeDone).toHaveBeenCalledTimes(1);
+    onSpy.mockRestore();
+  });
+
+  it("does NOT warn about pi-intercom when ctx.tools.intercom.send is present", () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const notify = vi.fn();
+    const ctx = {
+      sessionId: "ses_ic",
+      ui: { notify },
+      tools: { intercom: { send: vi.fn(async () => undefined) } },
+    };
+    curatorRuntimeExtension(makePi() as any, ctx as any);
+    const icWarn = notify.mock.calls.find(
+      (c) => typeof c[0] === "string" && /pi-intercom not found/.test(c[0]),
+    );
+    expect(icWarn).toBeUndefined();
+    onSpy.mockRestore();
+  });
+
+  it("warns about pi-intercom fallback when ctx.intercom lacks a send function", () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const notify = vi.fn();
+    const ctx = {
+      sessionId: "ses_ic2",
+      ui: { notify },
+      intercom: {}, // object present but no send()
+    };
+    curatorRuntimeExtension(makePi() as any, ctx as any);
+    const icWarn = notify.mock.calls.find(
+      (c) => typeof c[0] === "string" && /pi-intercom not found/.test(c[0]),
+    );
+    expect(icWarn).toBeTruthy();
+    expect(icWarn![1]).toBe("warn");
+    onSpy.mockRestore();
+  });
+
+  it("notifies 'identity env not set' and does not register the tool when env is absent", () => {
+    clearCuratorEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const notify = vi.fn();
+    const pi = makePi();
+    curatorRuntimeExtension(pi as any, {
+      sessionId: "ses_noid",
+      ui: { notify },
+    } as any);
+    const idNotify = notify.mock.calls.find(
+      (c) => typeof c[0] === "string" && /identity env not set/.test(c[0]),
+    );
+    expect(idNotify).toBeTruthy();
+    expect(idNotify![1]).toBe("info");
+    expect(pi.registerTool).not.toHaveBeenCalled();
+    onSpy.mockRestore();
+  });
+
+  it("never throws when ctx is undefined and identity env is set (OptionalChaining safety)", () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    expect(() => curatorRuntimeExtension(makePi() as any, undefined)).not.toThrow();
+    // Heartbeat still starts using the ctx.sessionId ?? ctx.session.id fallback.
+    expect(startHeartbeat).toHaveBeenCalledTimes(1);
+    const opts = (startHeartbeat as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(opts.curatorSessionId).toBeUndefined();
+    onSpy.mockRestore();
+  });
+
+  it("never throws when ctx is undefined and the main-side flag is set (warn path safety)", () => {
+    baseEnv();
+    process.env[MAIN_EXTENSION_LOADED_FLAG] = "1";
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    expect(() => curatorRuntimeExtension(makePi() as any, undefined)).not.toThrow();
+    onSpy.mockRestore();
+  });
+
+  it("surfaces a setup failure via UI error notify when registerTool throws", () => {
+    baseEnv();
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const notify = vi.fn();
+    const pi = { registerTool: vi.fn(() => { throw new Error("nope"); }) };
+    curatorRuntimeExtension(pi as any, { sessionId: "ses_t", ui: { notify } } as any);
+    const errNotify = notify.mock.calls.find(
+      (c) => typeof c[0] === "string" && /setup failed/.test(c[0]),
+    );
+    expect(errNotify).toBeTruthy();
+    expect(errNotify![0]).toContain("nope");
+    expect(errNotify![1]).toBe("error");
+    onSpy.mockRestore();
+  });
+});
+
+describe("curatorRuntimeExtension — signal_main tool fallback execution", () => {
+  let tmpHome: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "curator-rt-home-"));
+    process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
+    setCuratorEnv({});
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  it("writes a fallback findings file when the intercom client rejects (REQ-SG-08)", async () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = makePi();
+    // ctx has NO intercom → tool uses the reject-fallback client.
+    curatorRuntimeExtension(pi as any, makeCtx("ses_fb") as any);
+
+    expect(pi.registerTool).toHaveBeenCalledTimes(1);
+    const tool = pi.registerTool.mock.calls[0][0];
+    const result = await tool.execute({ kind: "steer", message: "watch budget" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.via).toBe("fallback-file");
+      expect(fs.existsSync(result.path)).toBe(true);
+      // The fallback path lands under <tmpHome>/.pi-curator/findings/main-abc/.
+      expect(result.path).toContain(path.join("findings", "main-abc"));
+    }
+    onSpy.mockRestore();
   });
 });
