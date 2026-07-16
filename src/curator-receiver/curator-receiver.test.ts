@@ -462,3 +462,90 @@ describe("processIncoming (REQ-SG-03 structured details — D5)", () => {
     });
   });
 });
+
+// ─── REQ-SG-08: receiver-side severity routing (critical→force-steer, warn/critical→UI notify) ──
+
+describe("processIncoming (REQ-SG-08 receiver-side severity routing)", () => {
+  function makeEvent(bodyText: string, extraDetails: Record<string, unknown> = {}) {
+    return {
+      message: {
+        customType: "intercom_message",
+        content: `**📨 From spec** (/home/u/proj)\n\n${bodyText}`,
+        details: {
+          from: { name: "spec", id: "id-spec" },
+          bodyText,
+          ...extraDetails,
+        },
+      },
+    };
+  }
+
+  it("critical severity overrides an [APPEND] body to steer (force attention) + notifies error", () => {
+    const ui = { notify: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui,
+    };
+    const pi = { sendMessage: vi.fn() };
+    processIncoming(
+      makeEvent("[APPEND] gentle note", {
+        severity: "critical",
+        curatorAlias: "spec",
+        mainSessionId: "ses_main",
+        spawnedAt: "2026-07-07T12:00:00.000Z",
+      }),
+      ctx,
+      pi,
+      ["spec"],
+    );
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+    const [msg, opts] = pi.sendMessage.mock.calls[0];
+    // kind overridden append→steer
+    expect(msg.details).toMatchObject({ kind: "steer", severity: "critical" });
+    expect(opts.triggerTurn).toBe(true);
+    expect(opts.deliverAs).toBe("steer");
+    expect(ui.notify).toHaveBeenCalledWith(expect.any(String), "error");
+  });
+
+  it("warn severity keeps the recovered kind but notifies warning", () => {
+    const ui = { notify: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui,
+    };
+    const pi = { sendMessage: vi.fn() };
+    processIncoming(
+      makeEvent("[APPEND] soft note", {
+        severity: "warn",
+        curatorAlias: "spec",
+        mainSessionId: "ses_main",
+        spawnedAt: "2026-07-07T12:00:00.000Z",
+      }),
+      ctx,
+      pi,
+      ["spec"],
+    );
+    const [msg, opts] = pi.sendMessage.mock.calls[0];
+    expect(msg.details).toMatchObject({ kind: "append", severity: "warn" });
+    expect(opts.triggerTurn).toBeUndefined(); // append never forces a turn
+    expect(opts.deliverAs).toBe("nextTurn");
+    expect(ui.notify).toHaveBeenCalledWith(expect.any(String), "warning");
+  });
+
+  it("info severity delivers silently (no UI notification)", () => {
+    const ui = { notify: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui,
+    };
+    const pi = { sendMessage: vi.fn() };
+    processIncoming(
+      makeEvent("[STEER] normal", { curatorAlias: "spec", mainSessionId: "ses_main", spawnedAt: "t" }),
+      ctx,
+      pi,
+      ["spec"],
+    );
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+    expect(ui.notify).not.toHaveBeenCalled();
+  });
+});

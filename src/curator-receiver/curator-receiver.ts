@@ -244,7 +244,7 @@ export function processIncoming(
 
     // 3. Kind recovery (REQ-SG-04 stage i — body prefix, T0-Q4 confirmed).
     const body = resolveBodyText(message);
-    const kind: CuratorKind = parseKindPrefix(body) ?? "steer"; // safe default
+    const recoveredKind: CuratorKind = parseKindPrefix(body) ?? "steer"; // safe default
 
     // D5: thread signal metadata from the structured payload.
     const severity = resolveSeverity(message);
@@ -254,7 +254,16 @@ export function processIncoming(
 
     // 4. Build the re-delivery per kind map (REQ-SG-05 / REQ-SG-06).
     const cleanBody = stripKindPrefix(body);
-    const { msg, opts } = buildSendMessage(kind, cleanBody, undefined, {
+
+    // REQ-SG-08 severity routing (RECEIVER side): `critical` overrides the
+    // curator's chosen kind to `steer` (force attention) — mirroring the
+    // curator-side applySeverityRouting in signal-main.ts. warn/critical also
+    // surface a UI notification at the matching level (warn→warning,
+    // critical→error). info stays silent.
+    const effectiveKind: CuratorKind =
+      severity === "critical" ? "steer" : recoveredKind;
+
+    const { msg, opts } = buildSendMessage(effectiveKind, cleanBody, undefined, {
       severity,
       curatorAlias,
       mainSessionId,
@@ -263,6 +272,28 @@ export function processIncoming(
 
     // 5. Re-deliver into the main session.
     pi.sendMessage(msg, opts);
+
+    // REQ-SG-08: UI notification at the severity level (fire-and-forget,
+    // best-effort — never blocks the main turn).
+    if (severity === "critical") {
+      try {
+        ctx?.ui?.notify?.(
+          `curator:${curatorAlias ?? "unknown"} CRITICAL finding — force-steered`,
+          "error",
+        );
+      } catch {
+        // best-effort — UI is optional
+      }
+    } else if (severity === "warn") {
+      try {
+        ctx?.ui?.notify?.(
+          `curator:${curatorAlias ?? "unknown"} warning finding`,
+          "warning",
+        );
+      } catch {
+        // best-effort — UI is optional
+      }
+    }
     return true;
   } catch (err) {
     // REQ-SG-09: log to UI only, never re-throw, never block the main turn.
