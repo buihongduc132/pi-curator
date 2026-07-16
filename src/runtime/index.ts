@@ -67,6 +67,46 @@ export const ENV = {
 } as const;
 
 /**
+ * Env flag set by the main-side pi-curator extension when it loads in this
+ * process (REQ-CR-06 defensive check). The runtime is the SOLE runtime
+ * extension of a curator child (spawned with `--no-extensions -e runtime -e
+ * intercom`); if this flag is present, the main-side extension is ALSO loaded —
+ * a misconfiguration that risks recursion. Best-effort detection: an env flag.
+ */
+export const MAIN_EXTENSION_LOADED_FLAG = "PI_CURATOR_MAIN_EXTENSION_LOADED";
+
+/**
+ * Detect whether the main-side pi-curator extension is loaded in THIS process
+ * (REQ-CR-06). Returns `true` when the env flag is set OR a heuristic on the
+ * pi/ctx surface suggests the main-side extension is present. Pure over its
+ * inputs (best-effort — never throws).
+ */
+export function isMainExtensionLoaded(
+  pi: AnyExtensionAPI,
+  ctx: AnyExtensionContext,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (env[MAIN_EXTENSION_LOADED_FLAG] === "1" || env[MAIN_EXTENSION_LOADED_FLAG] === "true") {
+    return true;
+  }
+  // Best-effort: some pi versions surface the main-side hook registration via
+  // ctx.extensions / pi.extensions. Never throw.
+  try {
+    const ctxExt = (ctx as any)?.extensions;
+    if (Array.isArray(ctxExt) && ctxExt.some((e: any) => typeof e === "string" && /pi-curator|curator-main/i.test(e))) {
+      return true;
+    }
+    const piExt = (pi as any)?.extensions;
+    if (Array.isArray(piExt) && piExt.some((e: any) => typeof e === "string" && /pi-curator|curator-main/i.test(e))) {
+      return true;
+    }
+  } catch {
+    // ignore — best-effort.
+  }
+  return false;
+}
+
+/**
  * Default fallback findings dir:
  * `~/.pi-curator/findings/<mainSessionId>`. Matches the frozen contract with
  * `add-curator-lifecycle` `/curator status` + `curator-receiver.ts`.
@@ -118,6 +158,18 @@ export default function curatorRuntimeExtension(
   pi: AnyExtensionAPI,
   ctx?: AnyExtensionContext,
 ): void {
+  // REQ-CR-06 defensive check: the runtime MUST be the SOLE runtime extension of
+  // a curator child (loaded via `--no-extensions -e runtime -e intercom`). If the
+  // main-side pi-curator extension is ALSO loaded in this process, that is a
+  // misconfiguration that risks recursion (the curator's own turn_end would
+  // spawn sub-curators). Warn (non-blocking) and continue — we cannot spawn
+  // sub-curators from here, but the warning surfaces the issue for debugging.
+  if (isMainExtensionLoaded(pi, ctx)) {
+    ctx?.ui?.notify?.(
+      "curator-runtime: main-side pi-curator extension detected alongside the runtime (misconfiguration); expected --no-extensions",
+      "warn",
+    );
+  }
   try {
     const identity = readCuratorIdentity();
     if (!identity) {

@@ -84,6 +84,12 @@ export type CuratorClaimHeartbeatResult = "updated" | "not_owner" | "missing";
 /** Result of releasing a claim. */
 export type CuratorClaimReleaseResult = "released" | "not_owner" | "none";
 
+/**
+ * Result of seeding the claim's pid with the real child pid (D2 PID handoff).
+ * Returned so callers can branch on the (best-effort) outcome.
+ */
+export type SeedCuratorPidResult = "seeded" | "missing";
+
 // ─── Path helpers ───────────────────────────────────────────────────────────
 
 /** Default PID registration root: `~/.pi-curator/pids`. */
@@ -342,6 +348,47 @@ export async function releaseCuratorClaim(
       return "released";
     },
     { label: `curator-claim:release:${pid}` },
+  );
+}
+
+/**
+ * Seed the claim's `pid` with the REAL child pid (BLOCKER D2 PID handoff).
+ *
+ * After {@link acquireCuratorClaim} writes the claim with the MAIN process pid
+ * as a placeholder, this overwrites `pid` with the actual spawned child pid so
+ * the curator runtime's own heartbeat (which asserts `pid === childPid`) owns
+ * the slot on its first tick. NO ownership check — main just acquired the
+ * slot, so it is the rightful owner regardless of the placeholder pid.
+ *
+ * Also refreshes `heartbeatAt` and (optionally) `phase`. Guarded by
+ * {@link withLock} so the read-modify-write is atomic.
+ */
+export async function seedCuratorPid(
+  filePath: string,
+  childPid: number,
+  opts: { phase?: string; nowMs?: number } = {},
+): Promise<SeedCuratorPidResult> {
+  const lockFile = claimLockPath(filePath);
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+
+  return withLock(
+    lockFile,
+    async () => {
+      const current = await readCuratorClaim(filePath);
+      if (!current) return "missing";
+      const nowMs = opts.nowMs ?? Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const updated: CuratorClaim = {
+        ...current,
+        // Force-write the real child pid — NO ownership check (D2).
+        pid: childPid,
+        heartbeatAt: nowIso,
+        ...(opts.phase ? { phase: opts.phase } : {}),
+      };
+      await writeCuratorClaim(filePath, updated);
+      return "seeded";
+    },
+    { label: `curator-claim:seed:${childPid}` },
   );
 }
 

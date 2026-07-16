@@ -365,3 +365,187 @@ describe("processIncoming (REQ-SG-11 session-targeting)", () => {
     expect(pi.sendMessage).toHaveBeenCalled();
   });
 });
+
+// ─── D5: buildSendMessage must include details {kind,severity,curatorAlias,mainSessionId,spawnedAt} ─
+
+describe("buildSendMessage (REQ-SG-03 details field — D5)", () => {
+  it("steer message carries kind, severity, curatorAlias, mainSessionId, spawnedAt in details", () => {
+    const out = buildSendMessage("steer", "stop now", { appendDisplay: false }, {
+      severity: "critical",
+      curatorAlias: "scold",
+      mainSessionId: "ses_main",
+      spawnedAt: "2026-07-07T10:00:00.000Z",
+    });
+    expect(out.msg.details).toEqual({
+      kind: "steer",
+      severity: "critical",
+      curatorAlias: "scold",
+      mainSessionId: "ses_main",
+      spawnedAt: "2026-07-07T10:00:00.000Z",
+    });
+  });
+
+  it("append message carries kind, severity, curatorAlias, mainSessionId, spawnedAt in details", () => {
+    const out = buildSendMessage("append", "gentle note", { appendDisplay: true }, {
+      severity: "warn",
+      curatorAlias: "spec",
+      mainSessionId: "ses_main",
+      spawnedAt: "2026-07-07T11:00:00.000Z",
+    });
+    expect(out.msg.details).toEqual({
+      kind: "append",
+      severity: "warn",
+      curatorAlias: "spec",
+      mainSessionId: "ses_main",
+      spawnedAt: "2026-07-07T11:00:00.000Z",
+    });
+  });
+
+  it("defaults severity to 'info' when not provided", () => {
+    const out = buildSendMessage("steer", "stop now", undefined);
+    expect(out.msg.details).toEqual({
+      kind: "steer",
+      severity: "info",
+    });
+  });
+});
+
+// ─── D5: processIncoming extracts structured signal metadata from details ──
+
+describe("processIncoming (REQ-SG-03 structured details — D5)", () => {
+  function makeEvent(bodyText: string, extraDetails: Record<string, unknown> = {}) {
+    return {
+      message: {
+        customType: "intercom_message",
+        content: `**📨 From spec** (/home/u/proj)\n\n${bodyText}`,
+        details: {
+          from: { name: "spec", id: "id-spec" },
+          bodyText,
+          ...extraDetails,
+        },
+      },
+    };
+  }
+
+  const ctx = {
+    sessionManager: { getSessionId: () => "ses_main" },
+    ui: { notify: vi.fn() },
+  };
+
+  it("threads severity/curatorAlias/mainSessionId/spawnedAt into pi.sendMessage details", () => {
+    const pi = { sendMessage: vi.fn() };
+    const extra = {
+      severity: "warn",
+      curatorAlias: "spec",
+      mainSessionId: "ses_main",
+      spawnedAt: "2026-07-07T12:00:00.000Z",
+    };
+    processIncoming(makeEvent("[STEER] budget exceeded", extra), ctx, pi, ["spec"]);
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.details).toMatchObject({
+      kind: "steer",
+      severity: "warn",
+      curatorAlias: "spec",
+      mainSessionId: "ses_main",
+      spawnedAt: "2026-07-07T12:00:00.000Z",
+    });
+  });
+
+  it("extracts severity from the structured payload (default info when missing)", () => {
+    const pi = { sendMessage: vi.fn() };
+    processIncoming(makeEvent("[STEER] plain"), ctx, pi, ["spec"]);
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.details).toMatchObject({
+      kind: "steer",
+      severity: "info",
+    });
+  });
+});
+
+// ─── REQ-SG-08: receiver-side severity routing (critical→force-steer, warn/critical→UI notify) ──
+
+describe("processIncoming (REQ-SG-08 receiver-side severity routing)", () => {
+  function makeEvent(bodyText: string, extraDetails: Record<string, unknown> = {}) {
+    return {
+      message: {
+        customType: "intercom_message",
+        content: `**📨 From spec** (/home/u/proj)\n\n${bodyText}`,
+        details: {
+          from: { name: "spec", id: "id-spec" },
+          bodyText,
+          ...extraDetails,
+        },
+      },
+    };
+  }
+
+  it("critical severity overrides an [APPEND] body to steer (force attention) + notifies error", () => {
+    const ui = { notify: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui,
+    };
+    const pi = { sendMessage: vi.fn() };
+    processIncoming(
+      makeEvent("[APPEND] gentle note", {
+        severity: "critical",
+        curatorAlias: "spec",
+        mainSessionId: "ses_main",
+        spawnedAt: "2026-07-07T12:00:00.000Z",
+      }),
+      ctx,
+      pi,
+      ["spec"],
+    );
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+    const [msg, opts] = pi.sendMessage.mock.calls[0];
+    // kind overridden append→steer
+    expect(msg.details).toMatchObject({ kind: "steer", severity: "critical" });
+    expect(opts.triggerTurn).toBe(true);
+    expect(opts.deliverAs).toBe("steer");
+    expect(ui.notify).toHaveBeenCalledWith(expect.any(String), "error");
+  });
+
+  it("warn severity keeps the recovered kind but notifies warning", () => {
+    const ui = { notify: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui,
+    };
+    const pi = { sendMessage: vi.fn() };
+    processIncoming(
+      makeEvent("[APPEND] soft note", {
+        severity: "warn",
+        curatorAlias: "spec",
+        mainSessionId: "ses_main",
+        spawnedAt: "2026-07-07T12:00:00.000Z",
+      }),
+      ctx,
+      pi,
+      ["spec"],
+    );
+    const [msg, opts] = pi.sendMessage.mock.calls[0];
+    expect(msg.details).toMatchObject({ kind: "append", severity: "warn" });
+    expect(opts.triggerTurn).toBeUndefined(); // append never forces a turn
+    expect(opts.deliverAs).toBe("nextTurn");
+    expect(ui.notify).toHaveBeenCalledWith(expect.any(String), "warning");
+  });
+
+  it("info severity delivers silently (no UI notification)", () => {
+    const ui = { notify: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui,
+    };
+    const pi = { sendMessage: vi.fn() };
+    processIncoming(
+      makeEvent("[STEER] normal", { curatorAlias: "spec", mainSessionId: "ses_main", spawnedAt: "t" }),
+      ctx,
+      pi,
+      ["spec"],
+    );
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+    expect(ui.notify).not.toHaveBeenCalled();
+  });
+});

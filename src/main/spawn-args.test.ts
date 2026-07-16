@@ -7,6 +7,7 @@ import {
   buildSpawnArgs,
   renderDefaultTaskPrompt,
   resolveTaskPrompt,
+  type BuildSpawnArgsInput,
 } from "./spawn-args.js";
 import type { ResolvedPersona } from "../util/config.js";
 
@@ -23,13 +24,26 @@ function persona(overrides: Partial<ResolvedPersona> = {}): ResolvedPersona {
   };
 }
 
+const RUNTIME_PATH = "/repo/src/runtime/index.ts";
+const INTERCOM_PATH = "/repo/node_modules/pi-intercom/index.ts";
+
+/** Minimal required input (with the two new REQ-CR-06 extension paths). */
+function baseInput(
+  overrides: Partial<BuildSpawnArgsInput> = {},
+): BuildSpawnArgsInput {
+  return {
+    persona: persona(),
+    filteredJsonlPath: "/tmp/fork.jsonl",
+    mainSessionId: "sess-1",
+    runtimeExtensionPath: RUNTIME_PATH,
+    intercomExtensionPath: INTERCOM_PATH,
+    ...overrides,
+  };
+}
+
 describe("buildSpawnArgs", () => {
   it("builds the minimal command (fork + goal + name + prompt)", () => {
-    const { args } = buildSpawnArgs({
-      persona: persona(),
-      filteredJsonlPath: "/tmp/fork.jsonl",
-      mainSessionId: "sess-1",
-    });
+    const { args } = buildSpawnArgs(baseInput());
     expect(args).toContain("--fork");
     expect(args).toContain("/tmp/fork.jsonl");
     expect(args).toContain("--append-system-prompt");
@@ -39,85 +53,107 @@ describe("buildSpawnArgs", () => {
     expect(args).toContain("-p");
   });
 
+  it("emits --no-extensions FIRST (REQ-CR-06 recursion guard)", () => {
+    const { args } = buildSpawnArgs(baseInput());
+    expect(args).toContain("--no-extensions");
+    expect(args[0]).toBe("--no-extensions");
+  });
+
+  it("emits -e <runtime> and -e <intercom> after --no-extensions (REQ-CR-06)", () => {
+    const { args } = buildSpawnArgs(baseInput());
+    // First two args are --no-extensions; then the two -e pairs.
+    expect(args[1]).toBe("-e");
+    expect(args[2]).toBe(RUNTIME_PATH);
+    expect(args[3]).toBe("-e");
+    expect(args[4]).toBe(INTERCOM_PATH);
+    // exactly two -e flags
+    const eFlags = args.filter((a) => a === "-e");
+    expect(eFlags).toHaveLength(2);
+  });
+
+  it("throws when runtimeExtensionPath is missing (REQ-CR-06 required)", () => {
+    expect(() =>
+      buildSpawnArgs({
+        persona: persona(),
+        filteredJsonlPath: "/tmp/fork.jsonl",
+        mainSessionId: "sess-1",
+        runtimeExtensionPath: "",
+        intercomExtensionPath: INTERCOM_PATH,
+      }),
+    ).toThrow(/runtimeExtensionPath is required/);
+  });
+
+  it("throws when intercomExtensionPath is missing (REQ-CR-06 required)", () => {
+    expect(() =>
+      buildSpawnArgs({
+        persona: persona(),
+        filteredJsonlPath: "/tmp/fork.jsonl",
+        mainSessionId: "sess-1",
+        runtimeExtensionPath: RUNTIME_PATH,
+        intercomExtensionPath: "",
+      }),
+    ).toThrow(/intercomExtensionPath is required/);
+  });
+
+  it("injects goalContents into the task prompt (D7)", () => {
+    const { taskPrompt } = buildSpawnArgs(
+      baseInput({ goalContents: "Nudge on skipped skills." }),
+    );
+    expect(taskPrompt).toContain("Nudge on skipped skills.");
+  });
+
   it("includes --model when persona.model is set", () => {
-    const { args } = buildSpawnArgs({
-      persona: persona({ model: "qwen3-coder" }),
-      filteredJsonlPath: "/tmp/fork.jsonl",
-      mainSessionId: "sess-1",
-    });
+    const { args } = buildSpawnArgs(baseInput({ persona: persona({ model: "qwen3-coder" }) }));
     expect(args).toContain("--model");
     expect(args).toContain("qwen3-coder");
   });
 
   it("omits --model when persona.model is unset", () => {
-    const { args } = buildSpawnArgs({
-      persona: persona(),
-      filteredJsonlPath: "/tmp/fork.jsonl",
-      mainSessionId: "sess-1",
-    });
+    const { args } = buildSpawnArgs(baseInput());
     expect(args).not.toContain("--model");
   });
 
   it("includes --exclude-tools when persona.excludeTools is set", () => {
-    const { args } = buildSpawnArgs({
-      persona: persona({ excludeTools: ["bash", "edit"] }),
-      filteredJsonlPath: "/tmp/fork.jsonl",
-      mainSessionId: "sess-1",
-    });
+    const { args } = buildSpawnArgs(
+      baseInput({ persona: persona({ excludeTools: ["bash", "edit"] }) }),
+    );
     expect(args).toContain("--exclude-tools");
     expect(args).toContain("bash,edit");
     expect(args).not.toContain("--tools");
   });
 
   it("includes --tools when persona.tools is set", () => {
-    const { args } = buildSpawnArgs({
-      persona: persona({ tools: ["read", "grep"] }),
-      filteredJsonlPath: "/tmp/fork.jsonl",
-      mainSessionId: "sess-1",
-    });
+    const { args } = buildSpawnArgs(
+      baseInput({ persona: persona({ tools: ["read", "grep"] }) }),
+    );
     expect(args).toContain("--tools");
     expect(args).toContain("read,grep");
     expect(args).not.toContain("--exclude-tools");
   });
 
   it("omits BOTH --tools and --exclude-tools when neither is set", () => {
-    const { args } = buildSpawnArgs({
-      persona: persona(),
-      filteredJsonlPath: "/tmp/fork.jsonl",
-      mainSessionId: "sess-1",
-    });
+    const { args } = buildSpawnArgs(baseInput());
     expect(args).not.toContain("--tools");
     expect(args).not.toContain("--exclude-tools");
   });
 
   it("throws when BOTH excludeTools and tools are set (mutual exclusion)", () => {
     expect(() =>
-      buildSpawnArgs({
-        persona: persona({ excludeTools: ["bash"], tools: ["read"] }),
-        filteredJsonlPath: "/tmp/fork.jsonl",
-        mainSessionId: "sess-1",
-      }),
+      buildSpawnArgs(
+        baseInput({ persona: persona({ excludeTools: ["bash"], tools: ["read"] }) }),
+      ),
     ).toThrow(/mutually exclusive/);
   });
 
   it("uses the provided piBin when set", () => {
-    const { args } = buildSpawnArgs({
-      persona: persona(),
-      filteredJsonlPath: "/tmp/fork.jsonl",
-      mainSessionId: "sess-1",
-      piBin: "/usr/local/bin/pi",
-    });
-    // piBin is the executable, not in args; args starts with --fork.
+    const { args } = buildSpawnArgs(baseInput({ piBin: "/usr/local/bin/pi" }));
+    // piBin is the executable, not in args; args starts with --no-extensions.
     // The caller does: spawn(piBin, args).
-    expect(args[0]).toBe("--fork");
+    expect(args[0]).toBe("--no-extensions");
   });
 
   it("omits goalFile flag when persona.goalFile is unset", () => {
-    const { args } = buildSpawnArgs({
-      persona: persona({ goalFile: undefined }),
-      filteredJsonlPath: "/tmp/fork.jsonl",
-      mainSessionId: "sess-1",
-    });
+    const { args } = buildSpawnArgs(baseInput({ persona: persona({ goalFile: undefined }) }));
     expect(args).not.toContain("--append-system-prompt");
   });
 });

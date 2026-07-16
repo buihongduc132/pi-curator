@@ -25,6 +25,9 @@ import { join } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+/** Severity carried in a curator signal (REQ-SG severity routing). */
+export type CuratorSeverity = "info" | "warn" | "critical";
+
 /** Curator delivery kind (REQ-SG-04). `steer` forces a turn; `append` is ambient. */
 export type CuratorKind = "steer" | "append";
 
@@ -109,6 +112,34 @@ function resolveSender(message: IncomingMessage): SenderInfo | null {
 function resolveMainSessionId(message: IncomingMessage): string | undefined {
   const id = (message.details as { mainSessionId?: string } | undefined)?.mainSessionId;
   return typeof id === "string" ? id : undefined;
+}
+
+/**
+ * Resolve the curator-declared severity from `details.severity` (REQ-SG severity
+ * routing). Defaults to `"info"` when absent or unparseable. Pure.
+ */
+function resolveSeverity(message: IncomingMessage): CuratorSeverity {
+  const raw = (message.details as { severity?: unknown } | undefined)?.severity;
+  if (raw === "info" || raw === "warn" || raw === "critical") return raw;
+  return "info";
+}
+
+/**
+ * Resolve the curator alias from `details.curatorAlias` (preferred) or fall back
+ * to the sender name. Pure. Returns `undefined` when unrecoverable.
+ */
+function resolveCuratorAlias(message: IncomingMessage, sender: SenderInfo | null): string | undefined {
+  const explicit = (message.details as { curatorAlias?: unknown } | undefined)?.curatorAlias;
+  if (typeof explicit === "string" && explicit.length > 0) return explicit;
+  // Fallback: scrape the alias from the rendered content, else the sender name.
+  const content = typeof message.content === "string" ? message.content : "";
+  return extractCuratorAlias(content) ?? sender?.name ?? undefined;
+}
+
+/** Resolve the curator-declared spawn timestamp from `details.spawnedAt`. Pure. */
+function resolveSpawnedAt(message: IncomingMessage): string | undefined {
+  const raw = (message.details as { spawnedAt?: unknown } | undefined)?.spawnedAt;
+  return typeof raw === "string" ? raw : undefined;
 }
 
 // ─── Task 2.3+ (REQ-SG-03/04/05/06/11): full incoming-message pipeline ────
@@ -213,14 +244,56 @@ export function processIncoming(
 
     // 3. Kind recovery (REQ-SG-04 stage i — body prefix, T0-Q4 confirmed).
     const body = resolveBodyText(message);
-    const kind: CuratorKind = parseKindPrefix(body) ?? "steer"; // safe default
+    const recoveredKind: CuratorKind = parseKindPrefix(body) ?? "steer"; // safe default
+
+    // D5: thread signal metadata from the structured payload.
+    const severity = resolveSeverity(message);
+    const curatorAlias = resolveCuratorAlias(message, sender);
+    const mainSessionId = resolveMainSessionId(message);
+    const spawnedAt = resolveSpawnedAt(message);
 
     // 4. Build the re-delivery per kind map (REQ-SG-05 / REQ-SG-06).
     const cleanBody = stripKindPrefix(body);
-    const { msg, opts } = buildSendMessage(kind, cleanBody, undefined);
+
+    // REQ-SG-08 severity routing (RECEIVER side): `critical` overrides the
+    // curator's chosen kind to `steer` (force attention) — mirroring the
+    // curator-side applySeverityRouting in signal-main.ts. warn/critical also
+    // surface a UI notification at the matching level (warn→warning,
+    // critical→error). info stays silent.
+    const effectiveKind: CuratorKind =
+      severity === "critical" ? "steer" : recoveredKind;
+
+    const { msg, opts } = buildSendMessage(effectiveKind, cleanBody, undefined, {
+      severity,
+      curatorAlias,
+      mainSessionId,
+      spawnedAt,
+    });
 
     // 5. Re-deliver into the main session.
     pi.sendMessage(msg, opts);
+
+    // REQ-SG-08: UI notification at the severity level (fire-and-forget,
+    // best-effort — never blocks the main turn).
+    if (severity === "critical") {
+      try {
+        ctx?.ui?.notify?.(
+          `curator:${curatorAlias ?? "unknown"} CRITICAL finding — force-steered`,
+          "error",
+        );
+      } catch {
+        // best-effort — UI is optional
+      }
+    } else if (severity === "warn") {
+      try {
+        ctx?.ui?.notify?.(
+          `curator:${curatorAlias ?? "unknown"} warning finding`,
+          "warning",
+        );
+      } catch {
+        // best-effort — UI is optional
+      }
+    }
     return true;
   } catch (err) {
     // REQ-SG-09: log to UI only, never re-throw, never block the main turn.
@@ -323,10 +396,27 @@ export function buildSendMessage(
   kind: CuratorKind,
   content: string,
   persona: ReceiverPersona | undefined,
+  details?: {
+    severity?: CuratorSeverity;
+    curatorAlias?: string;
+    mainSessionId?: string;
+    spawnedAt?: string;
+  },
 ): BuiltSendMessage {
+  // D5 / REQ-SG-03: round-trip signal metadata so downstream consumers (and the
+  // main session log) keep the curator identity + severity. Defaults severity to
+  // "info" per REQ-SG severity routing.
+  const severity: CuratorSeverity = details?.severity ?? "info";
+  const roundTrip = {
+    kind,
+    severity,
+    ...(details?.curatorAlias !== undefined ? { curatorAlias: details.curatorAlias } : {}),
+    ...(details?.mainSessionId !== undefined ? { mainSessionId: details.mainSessionId } : {}),
+    ...(details?.spawnedAt !== undefined ? { spawnedAt: details.spawnedAt } : {}),
+  };
   if (kind === "steer") {
     return {
-      msg: { customType: "curator_steer", content, display: true },
+      msg: { customType: "curator_steer", content, display: true, details: roundTrip },
       opts: { triggerTurn: true, deliverAs: "steer" },
     };
   }
@@ -336,6 +426,7 @@ export function buildSendMessage(
       customType: "curator_append",
       content,
       display: persona?.appendDisplay ?? false,
+      details: roundTrip,
     },
     opts: { deliverAs: "nextTurn" },
   };

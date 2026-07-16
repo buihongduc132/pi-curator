@@ -225,6 +225,8 @@ describe("curator spawn pipeline (T12 e2e smoke)", () => {
       filteredJsonlPath: forkPath,
       mainSessionId: "main-e2e",
       mainSessionName: "main-e2e-session",
+      runtimeExtensionPath: "/repo/src/runtime/index.ts",
+      intercomExtensionPath: "/repo/node_modules/pi-intercom/index.ts",
     });
 
     // Required flags present.
