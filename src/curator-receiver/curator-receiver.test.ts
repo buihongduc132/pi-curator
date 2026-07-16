@@ -931,3 +931,187 @@ describe("isCuratorNameLooseMatch / stripKindPrefix direct (mutation survivors)"
     expect(mod.stripKindPrefix("plain")).toBe("plain");
   });
 });
+
+// ─── Mutation survivor remediation (targeted TDD) ────────────────────────────
+
+describe("processIncoming — mutation survivor remediation", () => {
+  function makeEvent(opts: {
+    content?: string;
+    bodyText?: string;
+    senderName?: string;
+    extra?: Record<string, unknown>;
+  }) {
+    const senderName = opts.senderName ?? "spec";
+    const content =
+      opts.content !== undefined
+        ? opts.content
+        : `**📨 From ${senderName}** (/home/u/proj)\n\n${opts.bodyText ?? "[STEER] body"}`;
+    const details: Record<string, unknown> = {
+      from: { name: senderName, id: `id-${senderName}` },
+    };
+    if (opts.bodyText !== undefined) details.bodyText = opts.bodyText;
+    if (opts.extra) Object.assign(details, opts.extra);
+    return { message: { customType: "intercom_message", content, details } };
+  }
+
+  // ── resolveBodyText: content string-check + idx boundary ──────────────
+
+  it("re-delivers when message.content is absent (bodyText present)", () => {
+    // Kills: line 92 ConditionalExpression→true in resolveBodyText (would set
+    // content=undefined → .indexOf throws → caught → returns false).
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    const event = makeEvent({ content: undefined, bodyText: "[STEER] hi" });
+    const result = processIncoming(event, ctx, pi, ["spec"]);
+    expect(result).toBe(true);
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.content).toBe("hi");
+  });
+
+  it("recovers body when the blank-line separator is at index 0", () => {
+    // Kills: line 94 EqualityOperator→`idx > 0` (would return the full content
+    // including the leading blank lines, changing cleanBody).
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    // content starts with "\n\n" (idx===0); no bodyText → must slice(2).
+    const event = makeEvent({ content: "\n\nplain body no prefix" });
+    processIncoming(event, ctx, pi, ["spec"]);
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.content).toBe("plain body no prefix");
+  });
+
+  // ── resolveCuratorAlias: content string-check ─────────────────────────
+
+  it("uses the content-scraped alias when it differs from the sender name", () => {
+    // Kills: line 135 EqualityOperator→!== and ConditionalExpression→false
+    // (both would drop the content path → alias falls back to sender.name).
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    // Sender is "spec" but the rendered From header names "scold".
+    const event = makeEvent({
+      senderName: "spec",
+      content: "**📨 From scold** (/p)\n\n[STEER] body",
+      bodyText: "[STEER] body",
+    });
+    processIncoming(event, ctx, pi, ["spec"]);
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.details.curatorAlias).toBe("scold");
+  });
+
+  it("falls back to sender.name when content is undefined and no curatorAlias", () => {
+    // Kills: line 135 ConditionalExpression→true (would call extractCuratorAlias
+    // on undefined → throws → caught → returns false, no re-delivery).
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    const event = makeEvent({ content: undefined, bodyText: "[STEER] body" });
+    const result = processIncoming(event, ctx, pi, ["spec"]);
+    expect(result).toBe(true);
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.details.curatorAlias).toBe("spec");
+  });
+
+  // ── return-value assertions (BooleanLiteral false→true mutants) ───────
+
+  it("returns false (not true) for an unknown sender", () => {
+    // Kills: line 227 BooleanLiteral→true.
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    const event = makeEvent({ senderName: "random-user" });
+    const result = processIncoming(event, ctx, pi, ["spec"]);
+    expect(result).toBe(false);
+    expect(pi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("returns false (not true) for a signal targeting a different main session", () => {
+    // Kills: line 242 BooleanLiteral→true.
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    const event = makeEvent({
+      senderName: "spec",
+      extra: { mainSessionId: "ses_OTHER" },
+    });
+    const result = processIncoming(event, ctx, pi, ["spec"]);
+    expect(result).toBe(false);
+    expect(pi.sendMessage).not.toHaveBeenCalled();
+  });
+
+  // ── sessionManager.getSessionId optional-chaining ─────────────────────
+
+  it("uses ctx.sessionId when sessionManager lacks getSessionId", () => {
+    // Kills: line 235 OptionalChaining (`.getSessionId?.()` → `.getSessionId()`):
+    // the mutant throws on a sessionManager without getSessionId.
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: {} as never, // present but no getSessionId method
+      sessionId: "ses_main",
+      ui: { notify: vi.fn() },
+    };
+    const event = makeEvent({
+      senderName: "spec",
+      extra: { mainSessionId: "ses_main" },
+    });
+    const result = processIncoming(event, ctx, pi, ["spec"]);
+    expect(result).toBe(true);
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  // ── REQ-SG-08 notify: curatorAlias ?? "unknown" ───────────────────────
+
+  it("critical-severity notify message embeds the resolved alias (not 'unknown')", () => {
+    // Kills: line 290 LogicalOperator `curatorAlias && "unknown"` mutant
+    // (would replace a truthy alias with the literal "unknown").
+    const notify = vi.fn();
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify },
+    };
+    const pi = { sendMessage: vi.fn() };
+    const event = makeEvent({
+      senderName: "spec",
+      bodyText: "[APPEND] forced",
+      extra: { severity: "critical", curatorAlias: "spec" },
+    });
+    processIncoming(event, ctx, pi, ["spec"]);
+    expect(notify).toHaveBeenCalled();
+    expect(notify.mock.calls[0][0]).toContain("spec");
+    expect(notify.mock.calls[0][0]).not.toContain("unknown");
+    expect(notify.mock.calls[0][1]).toBe("error");
+  });
+
+  it("warn-severity notify fires at the warning level", () => {
+    // Exercises the warn branch (line 289) with a real notify call.
+    const notify = vi.fn();
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify },
+    };
+    const pi = { sendMessage: vi.fn() };
+    const event = makeEvent({
+      senderName: "spec",
+      bodyText: "[APPEND] gentle",
+      extra: { severity: "warn", curatorAlias: "spec" },
+    });
+    processIncoming(event, ctx, pi, ["spec"]);
+    expect(notify).toHaveBeenCalled();
+    expect(notify.mock.calls[0][1]).toBe("warning");
+  });
+});

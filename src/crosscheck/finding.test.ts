@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  SEVERITY_RANK,
   dedupKey,
   isValidSeverity,
   normalizeAgreement,
@@ -232,5 +233,119 @@ describe("parseEntry / parseMailboxText (fail-open)", () => {
       '{"type":"finding","topic":"a","curator":"c","ts":"x","severity":"info","summary":"s"}\r\n' +
       '{"type":"agreement","topic":"a","curator":"d","ts":"y","severity":"warn"}\r\n';
     expect(parseMailboxText(text)).toHaveLength(2);
+  });
+});
+
+// ─── Mutation survivor remediation (targeted TDD) ────────────────────────────
+
+describe("SEVERITY_RANK values", () => {
+  it("ranks info<warn<critical", () => {
+    // Kills: line 37 ObjectLiteral→{} (empty object).
+    expect(SEVERITY_RANK).toEqual({ info: 0, warn: 1, critical: 2 });
+    expect(SEVERITY_RANK.info).toBeLessThan(SEVERITY_RANK.warn);
+    expect(SEVERITY_RANK.warn).toBeLessThan(SEVERITY_RANK.critical);
+  });
+});
+
+describe("normalizeFinding — non-string field coercion", () => {
+  const base = {
+    type: "finding",
+    topic: "failing-ci",
+    curator: "spec",
+    ts: "2026-07-07T10:00:00.000Z",
+    severity: "critical",
+    summary: "x",
+  };
+  it("treats a non-string curator as missing (no throw, returns null)", () => {
+    // Kills: line 129 ConditionalExpression→true (would call .trim() on undefined → throw).
+    expect(normalizeFinding({ ...base, curator: undefined })).toBeNull();
+    expect(normalizeFinding({ ...base, curator: 42 as never })).toBeNull();
+  });
+  it("coerces a non-string ts to empty string", () => {
+    // Kills: line 130 ConditionalExpression→true (would thread the raw non-string).
+    const out = normalizeFinding({ ...base, ts: undefined });
+    expect(out?.ts).toBe("");
+  });
+});
+
+describe("normalizeAgreement — trim + non-string coercion", () => {
+  const base = {
+    type: "agreement",
+    topic: "failing-ci",
+    curator: "quality",
+    ts: "2026-07-07T10:01:00.000Z",
+    severity: "critical",
+  };
+  it("trims whitespace from topic + curator", () => {
+    // Kills: line 150/151 MethodExpression (drops .trim()) + ConditionalExpression→true.
+    const out = normalizeAgreement({
+      ...base,
+      topic: "  failing-ci  ",
+      curator: "  quality  ",
+    });
+    expect(out?.topic).toBe("failing-ci");
+    expect(out?.curator).toBe("quality");
+  });
+  it("treats a non-string topic as missing (returns null, no throw)", () => {
+    // Kills: line 150 ConditionalExpression→true (.trim() on undefined).
+    expect(normalizeAgreement({ ...base, topic: undefined })).toBeNull();
+  });
+  it("coerces a non-string ts to empty string", () => {
+    // Kills: line 152 ConditionalExpression→true (threads raw non-string).
+    const out = normalizeAgreement({ ...base, ts: undefined });
+    expect(out?.ts).toBe("");
+  });
+  it("rejects an agreement with an empty topic OR empty curator", () => {
+    // Kills: line 153 ConditionalExpression→false + LogicalOperator→&&.
+    expect(normalizeAgreement({ ...base, topic: "" })).toBeNull();
+    expect(normalizeAgreement({ ...base, curator: "" })).toBeNull();
+    // Both empty: original `!topic || !curator` short-circuits on topic.
+    // Mutant `!topic && !curator` would only reject when BOTH empty.
+    expect(normalizeAgreement({ ...base, topic: "", curator: "x" })).toBeNull();
+    expect(normalizeAgreement({ ...base, topic: "x", curator: "" })).toBeNull();
+  });
+});
+
+describe("normalizeEntry — null / non-object guards are honored", () => {
+  it("rejects null without throwing", () => {
+    // Kills: line 172 ConditionalExpression→false (would dereference null → throw).
+    expect(() => normalizeEntry(null)).not.toThrow();
+    expect(normalizeEntry(null)).toBeNull();
+  });
+  it("rejects primitive numbers", () => {
+    expect(() => normalizeEntry(42)).not.toThrow();
+    expect(normalizeEntry(42)).toBeNull();
+  });
+  it("routes a finding correctly (does not collapse to agreement)", () => {
+    // Kills: line 175 ConditionalExpression→true (would route everything to agreement).
+    const out = normalizeEntry({
+      type: "finding",
+      topic: "t",
+      curator: "c",
+      ts: "x",
+      severity: "info",
+      summary: "s",
+    });
+    expect(out?.type).toBe("finding");
+  });
+  it("returns null for an unknown type (neither branch fires)", () => {
+    // Covers the final `return null` after both type checks.
+    expect(normalizeEntry({ type: "vote" })).toBeNull();
+    expect(normalizeEntry({})).toBeNull();
+  });
+});
+
+describe("parseEntry — leading/trailing whitespace is trimmed before parse", () => {
+  it("parses a JSON line padded with surrounding whitespace", () => {
+    // Kills: line 218 MethodExpression→line (drops .trim(); JSON.parse fails on
+    // surrounding whitespace / the trimmed-prefix regexes would not match).
+    const line =
+      '   {"type":"finding","topic":"t","curator":"c","ts":"x","severity":"info","summary":"s"}   ';
+    expect(parseEntry(line)?.type).toBe("finding");
+  });
+  it("returns null for a whitespace-only line (trimmed→empty)", () => {
+    // Documents line 219 behavior. NOTE: line 219 ConditionalExpression→false is
+    // an equivalent mutant (JSON.parse("") throws → catch returns null anyway).
+    expect(parseEntry("    ")).toBeNull();
   });
 });
