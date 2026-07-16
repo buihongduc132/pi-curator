@@ -47,6 +47,10 @@ import {
   seedCuratorPid,
 } from "../util/team-attach-claim.js";
 import { readPidEntries, summarizeLiveness, formatLivenessStatus } from "../util/staleness.js";
+import {
+  createCuratorLogger,
+  type CuratorLogger,
+} from "../util/logger.js";
 
 const DEFAULT_PI_BIN = "pi";
 const DEFAULT_FORK_ROOT = () => path.join(os.homedir(), ".pi-curator", "forks");
@@ -297,6 +301,8 @@ export async function handleTurnEnd(
     homeDir?: string;
     // Test seam: explicit now for deterministic timestamps.
     nowMs?: number;
+    // Test seam: inject a logger (default: a main-scoped curator logger).
+    logger?: CuratorLogger;
   },
 ): Promise<void> {
   const projectRoot = deps.projectRoot;
@@ -313,6 +319,19 @@ export async function handleTurnEnd(
   const nowMs = deps.nowMs ?? Date.now();
   const runtimeExtensionPath = deps.runtimeExtensionPath ?? resolveRuntimeExtensionPath();
   const intercomExtensionPath = deps.intercomExtensionPath ?? resolveIntercomExtensionPath();
+
+  // OTel-compatible structured logger (design: flow/plans/otel-logging/design.md).
+  // Default scope `curator.main`; child scopes per step. Never throws.
+  const log: CuratorLogger =
+    deps.logger ??
+    createCuratorLogger({
+      sessionId: mainSessionId,
+      scope: "curator.main",
+      persistentAttrs: {
+        "session.name": mainSessionName ?? mainSessionId,
+        "config.projectRoot": projectRoot,
+      },
+    });
 
   // D6: Process any `/curator restart` markers BEFORE evaluating the spawn gate.
   // Resetting lastSpawn[alias] makes the gate see turnsSince=MAX_INT, so the
@@ -332,6 +351,10 @@ export async function handleTurnEnd(
     loaded = getCachedConfig({ projectRoot });
   } catch (err) {
     safeNotify(ctx, `curator: config load failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+    log.error("config load failed", {
+      "persona.alias": "*",
+      error: err instanceof Error ? err.message : String(err),
+    });
     return;
   }
 
@@ -344,7 +367,21 @@ export async function handleTurnEnd(
     const minsSince = last ? (Date.now() - last.atMs) / 60_000 : Number.MAX_SAFE_INTEGER;
 
     const gate = evaluateSpawnGate({ persona, turnsSinceLastSpawn: turnsSince, minsSinceLastSpawn: minsSince });
-    if (!gate.spawn) continue;
+    if (!gate.spawn) {
+      log.debug("gate closed", {
+        "persona.alias": persona.alias,
+        turnsSince,
+        minsSince,
+        reason: gate.reason ?? "closed",
+      });
+      continue;
+    }
+    log.info("gate open", {
+      "persona.alias": persona.alias,
+      turn: turnNumber,
+      turnsSince,
+      minsSince,
+    });
 
     // Exclusivity (REQ-LC-07): acquire the claim slot before spawning.
     const claimPath = curatorClaimFile(pidRoot, mainSessionId, persona.alias);
@@ -355,13 +392,23 @@ export async function handleTurnEnd(
       sessionJsonl = fs.readFileSync(deps.sessionJsonlPath, "utf8");
     } catch {
       safeNotify(ctx, `curator: could not read session JSONL at ${deps.sessionJsonlPath}`, "error");
+      log.error("session jsonl read failed", {
+        "persona.alias": persona.alias,
+        path: deps.sessionJsonlPath,
+      });
       continue;
     }
     const forkPath = writeForkFile(sessionJsonl, persona, forksDir);
     if (!forkPath) {
       safeNotify(ctx, `curator: fork filter failed for ${persona.alias} (skipped)`, "error");
+      log.warn("fork filter produced no output", { "persona.alias": persona.alias });
       continue;
     }
+    log.info("fork written", {
+      "persona.alias": persona.alias,
+      inputBytes: sessionJsonl.length,
+      forkPath,
+    });
 
     // Acquire claim with parent pid as placeholder; updated after spawn.
     let acquireResult;
@@ -375,12 +422,24 @@ export async function handleTurnEnd(
       });
     } catch (err) {
       safeNotify(ctx, `curator: claim acquire failed for ${persona.alias}: ${err instanceof Error ? err.message : String(err)}`, "error");
+      log.error("claim acquire threw", {
+        "persona.alias": persona.alias,
+        claimPath,
+        error: err instanceof Error ? err.message : String(err),
+      });
       continue;
     }
     if (!acquireResult.ok) {
       // Slot held by a live/stale curator — skip (REQ-LC-07).
+      log.warn("claim slot held", {
+        "persona.alias": persona.alias,
+        claimPath,
+        reason: acquireResult.reason,
+        heldPid: acquireResult.claim?.pid,
+      });
       continue;
     }
+    log.info("claim acquired", { "persona.alias": persona.alias, claimPath });
 
     // D7: read the persona's goalFile contents so the task prompt is real text.
     const goalContents = readGoalContents(persona.goalFile);
@@ -400,6 +459,10 @@ export async function handleTurnEnd(
       }).args;
     } catch (err) {
       safeNotify(ctx, `curator: argv build failed for ${persona.alias}: ${err instanceof Error ? err.message : String(err)}`, "error");
+      log.error("argv build failed", {
+        "persona.alias": persona.alias,
+        error: err instanceof Error ? err.message : String(err),
+      });
       continue;
     }
 
@@ -420,6 +483,10 @@ export async function handleTurnEnd(
       });
     } catch (err) {
       safeNotify(ctx, `curator: spawn failed for ${persona.alias}: ${err instanceof Error ? err.message : String(err)}`, "error");
+      log.error("spawn failed", {
+        "persona.alias": persona.alias,
+        error: err instanceof Error ? err.message : String(err),
+      });
       continue;
     }
 
@@ -428,12 +495,27 @@ export async function handleTurnEnd(
     // the slot, so it is the legitimate owner. Without this, the runtime's own
     // heartbeat(child.pid) would return `not_owner` and HALT.
     if (child?.pid) {
+      log.info("curator spawned", {
+        "persona.alias": persona.alias,
+        pid: child.pid,
+        phase: "spawned",
+      });
       try {
         await seedCuratorPid(claimPath, child.pid, { phase: "spawned", nowMs });
-      } catch {
+        log.info("claim pid seeded", {
+          "persona.alias": persona.alias,
+          childPid: child.pid,
+          claimPath,
+        });
+      } catch (err) {
         // non-fatal — claim already written with placeholder pid; next
         // heartbeat may fail if this seed is missing, but the hook stays
         // non-blocking.
+        log.warn("claim pid seed failed (non-fatal)", {
+          "persona.alias": persona.alias,
+          childPid: child.pid,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -443,6 +525,10 @@ export async function handleTurnEnd(
     // Child dies with parent (detached:false). Best-effort error log.
     child?.on?.("error", (err: unknown) => {
       safeNotify(ctx, `curator: curator:${persona.alias} error: ${err instanceof Error ? err.message : String(err)}`, "error");
+      log.error("child process error", {
+        "persona.alias": persona.alias,
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
   }
 
@@ -473,6 +559,16 @@ export default function curatorMainExtension(pi: AnyPi, _ctx?: AnyCtx): void {
   let turnCounter = 0;
 
   pi.on?.("turn_end", async (event: unknown, ctx: AnyCtx) => {
+    // Main-scope logger created once per turn_end so the outer crash path can
+    // also log (the same instance is passed into handleTurnEnd via deps.logger).
+    const turnSessionId =
+      ctx?.sessionId ?? ctx?.session?.id ?? `pid-${process.pid}`;
+    const turnSessionName = ctx?.sessionName ?? ctx?.session?.name;
+    const outerLog = createCuratorLogger({
+      sessionId: turnSessionId,
+      scope: "curator.main",
+      persistentAttrs: { "session.name": turnSessionName ?? turnSessionId },
+    });
     try {
       turnCounter += 1;
       const projectRoot = ctx?.cwd ?? process.cwd();
@@ -481,6 +577,8 @@ export default function curatorMainExtension(pi: AnyPi, _ctx?: AnyCtx): void {
       const mainSessionName = ctx?.sessionName ?? ctx?.session?.name;
       const sessionJsonlPath =
         ctx?.sessionFile ?? ctx?.session?.file ?? path.join(projectRoot, ".pi", "session.jsonl");
+
+      outerLog.info("turn_end fired", { turn: turnCounter, cwd: projectRoot });
 
       // Pre-resolve extension paths once per hook invocation (REQ-CR-06).
       const runtimeExtensionPath = resolveRuntimeExtensionPath();
@@ -491,6 +589,9 @@ export default function curatorMainExtension(pi: AnyPi, _ctx?: AnyCtx): void {
           "curator: pi-intercom extension path not found; curator spawn skipped",
           "error",
         );
+        outerLog.error("pi-intercom extension path not found; curator spawn skipped", {
+          turn: turnCounter,
+        });
         return;
       }
 
@@ -503,9 +604,14 @@ export default function curatorMainExtension(pi: AnyPi, _ctx?: AnyCtx): void {
         turnNumber: turnCounter,
         runtimeExtensionPath,
         intercomExtensionPath,
+        logger: outerLog,
       });
     } catch (err) {
       // REQ-LC-10: NEVER let the hook crash the main turn.
+      outerLog.error("turn_end handler crashed", {
+        error: err instanceof Error ? err.message : String(err),
+        turn: turnCounter,
+      });
       try {
         _ctx?.ui?.notify?.(
           `curator: turn_end handler crashed: ${err instanceof Error ? err.message : String(err)}`,

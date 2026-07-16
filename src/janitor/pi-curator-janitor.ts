@@ -20,6 +20,7 @@
 import { runTick } from "./run-tick.js";
 import * as path from "node:path";
 import * as fs from "node:fs";
+import { createCuratorLogger, type CuratorLogger } from "../util/logger.js";
 
 function home(): string {
   return process.env.HOME || process.env.USERPROFILE || "/tmp";
@@ -43,6 +44,11 @@ async function tickOnce(
   forksDir: string,
   logsDir?: string,
 ): Promise<void> {
+  const jLog: CuratorLogger = createCuratorLogger({
+    sessionId: "janitor",
+    scope: "curator.janitor",
+    persistentAttrs: { pidsRoot, archiveDir, forksDir, logsDir: logsDir ?? null },
+  });
   // Janitor sweeps ALL main sessions (pidsRoot/<mainSessionId>/*). Enumerate
   // per-session dirs; also include the flat case (pidsRoot/<curator>.json).
   let sessionDirs: string[] = [];
@@ -64,7 +70,13 @@ async function tickOnce(
   for (const dir of sessionDirs) {
     // D11: pass logsDir so Phase 3 (stderr log GC) actually runs in prod.
     // runTick treats a missing/unreadable logsDir as a no-op.
-    const r = await runTick(dir, { archiveDir, forksDir, killPids: true, logsDir });
+    const r = await runTick(dir, {
+      archiveDir,
+      forksDir,
+      killPids: true,
+      logsDir,
+      onLog: (level, msg, attrs) => jLog[level](msg, attrs),
+    });
     swept += r.swept;
     forksDeleted += r.forksDeleted;
     logsDeleted += r.logsDeleted;
