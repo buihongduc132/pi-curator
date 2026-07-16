@@ -161,11 +161,24 @@ describe("registerSlashCommands — handler dispatch", () => {
   });
 
   it("does not crash the session when a handler sub-call throws (REQ-LC-10)", async () => {
-    // Make readPidEntries blow up by making defaultPidRoot's session dir a file.
-    const pidRoot = path.join(homeDir, "pids");
-    const sessionDir = path.join(pidRoot, "ses-slash");
-    fs.mkdirSync(pidRoot, { recursive: true });
-    fs.writeFileSync(sessionDir, "i am a file"); // readdir → ENOTDIR → readPidEntries returns []? or throws
-    await expect(handler!("status", ctx())).resolves.toBeUndefined();
+    // A throwing `cwd` getter makes `effectiveCtx?.cwd` throw → outer catch →
+    // '/curator handler crashed' notify (the handler must NOT propagate).
+    const crashCtx = {
+      get cwd() { throw new Error("cwd boom"); },
+      sessionId: "ses-slash",
+      ui: { notify },
+    } as any;
+    await expect(handler!("list", crashCtx)).resolves.toBeUndefined();
+    const crash = notify.mock.calls.find((c) => /\/curator handler crashed/.test(String(c[0])));
+    expect(crash).toBeTruthy();
+    expect(crash[1]).toBe("error");
+    expect(String(crash[0])).toContain("cwd boom");
+  });
+
+  it("default export registers the curator slash commands", async () => {
+    const mod = await import("./slash-commands.js");
+    const defPi: any = { registerSlashCommand: vi.fn() };
+    expect(() => mod.default(defPi, { ui: { notify } })).not.toThrow();
+    expect(defPi.registerSlashCommand).toHaveBeenCalledWith("curator", expect.any(Function));
   });
 });
