@@ -44,3 +44,6 @@ logs/
 session-*-cache.json
 .pi/
 .gitnexus/
+reports/
+.stryker-tmp/
+.tmp/

@@ -1,0 +1,54 @@
+{
+  "mutator_guard_sha": "82afc85378cc1bbf32d6d32d037a2cfcbe7a1b6f",
+  "sibling": "pi-curator",
+  "lang": "typescript",
+  "layers": [
+    {
+      "source": "src/common/typescript/ignore-patterns.yml",
+      "contributed": [
+        "ignorePatterns"
+      ]
+    },
+    {
+      "source": "src/common/typescript/mutate-globs.yml",
+      "contributed": [
+        "mutate"
+      ]
+    },
+    {
+      "source": "src/common/typescript/mutator-excludes.yml",
+      "contributed": [
+        "mutator"
+      ]
+    },
+    {
+      "source": "src/common/typescript/runtime.yml",
+      "contributed": [
+        "coverageAnalysis",
+        "timeoutMS",
+        "timeoutFactor",
+        "disableBail",
+        "cleanTempDir",
+        "incremental",
+        "incrementalFile",
+        "reporters"
+      ]
+    },
+    {
+      "source": "src/common/typescript/thresholds.yml",
+      "contributed": [
+        "thresholds"
+      ]
+    },
+    {
+      "source": "src/repositories/pi-curator/mutation-check.yml",
+      "contributed": [
+        "testRunner",
+        "mutate",
+        "ignorePatterns",
+        "vitest",
+        "thresholds"
+      ]
+    }
+  ]
+}

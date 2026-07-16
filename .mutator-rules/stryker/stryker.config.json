@@ -1,0 +1,55 @@
+{
+  "ignorePatterns": [
+    "/dist",
+    "/build",
+    "/.svelte-kit",
+    "/.next",
+    "/coverage",
+    "/htmlcov",
+    "/.cache",
+    "/.venv",
+    "/.pytest_cache",
+    "/.abw",
+    "/.sg-rules",
+    "/.gitnexus",
+    "/rules",
+    "/node_modules",
+    "/.tmp",
+    "/logs",
+    "/.pi"
+  ],
+  "mutate": [
+    "src/**/*.ts",
+    "!**/*.test.ts",
+    "!**/*.d.ts"
+  ],
+  "mutator": {
+    "excludedMutations": [
+      "StringLiteral",
+      "Regex"
+    ]
+  },
+  "coverageAnalysis": "perTest",
+  "timeoutMS": 90000,
+  "timeoutFactor": 1.5,
+  "disableBail": false,
+  "cleanTempDir": true,
+  "incremental": true,
+  "incrementalFile": "reports/mutation/stryker-incremental.json",
+  "reporters": [
+    "progress",
+    "clear-text",
+    "json"
+  ],
+  "thresholds": {
+    "high": 95,
+    "low": 95,
+    "break": 95
+  },
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": ".mutator-rules/stryker/vitest.mutation.config.ts",
+    "dir": "."
+  },
+  "concurrency": 2
+}
