@@ -77,28 +77,64 @@ export function resolveRuntimeExtensionPath(here: string = _moduleDir): string {
 
 /**
  * Resolve the pi-intercom extension entry path (REQ-CR-06). Best-effort: env
- * override → package resolution → node_modules probe. Returns `undefined`
- * when no install is discoverable so the caller can surface a clear error.
+ * override → package resolution → node_modules probe → git-sourced sibling
+ * walk-up probe. Returns `undefined` when no install is discoverable so the
+ * caller can surface a clear error.
+ *
+ * `here` defaults to this module's directory and is overridable for tests. It
+ * seeds BOTH the node_modules probe (relative to `here`) and the git-sourced
+ * sibling walk-up (pi installs git-sourced extensions as sibling package dirs
+ * under a shared owner dir, e.g.
+ * `~/.pi/agent/git/github.com/<owner>/{pi-curator,pi-intercom}`).
  */
-export function resolveIntercomExtensionPath(): string | undefined {
+export function resolveIntercomExtensionPath(here: string = _moduleDir): string | undefined {
   if (process.env.PI_INTERCOM_EXTENSION_PATH) return process.env.PI_INTERCOM_EXTENSION_PATH;
   try {
     const require = createRequire(import.meta.url);
     const resolved = require.resolve("pi-intercom");
     if (typeof resolved === "string" && resolved.length > 0) return resolved;
   } catch {
-    // not resolvable via Node resolution — fall through to the probe.
+    // not resolvable via Node resolution — fall through to the probes.
   }
-  // Walk up from this module looking for node_modules/pi-intercom.
-  const probes = [
-    path.resolve(_moduleDir, "..", "..", "node_modules", "pi-intercom", "index.ts"),
-    path.resolve(_moduleDir, "..", "..", "node_modules", "pi-intercom", "index.js"),
+  // npm-style install: <pkgRoot>/node_modules/pi-intercom/index.{ts,js}.
+  const nmProbes = [
+    path.resolve(here, "..", "..", "node_modules", "pi-intercom", "index.ts"),
+    path.resolve(here, "..", "..", "node_modules", "pi-intercom", "index.js"),
   ];
-  for (const p of probes) {
+  for (const p of nmProbes) {
     if (fs.existsSync(p)) return p;
+  }
+  // Git-sourced sibling layout: walk up from `here` looking for an ancestor
+  // dir that contains a sibling `pi-intercom/index.{ts,js}`. Bounded walk
+  // (stops at filesystem root or after MAX_WALK_UP levels) so a deeply nested
+  // dev tree never scans the whole disk.
+  const MAX_WALK_UP = 10;
+  const siblingRel = ["pi-intercom", "index.ts"];
+  const siblingRelJs = ["pi-intercom", "index.js"];
+  let dir = here;
+  for (let i = 0; i < MAX_WALK_UP; i++) {
+    const tsCandidate = path.join(dir, ...siblingRel);
+    if (fs.existsSync(tsCandidate)) return tsCandidate;
+    const jsCandidate = path.join(dir, ...siblingRelJs);
+    if (fs.existsSync(jsCandidate)) return jsCandidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // reached filesystem root.
+    dir = parent;
   }
   return undefined;
 }
+
+/**
+ * Test seam for {@link resolveIntercomExtensionPath}. Production code uses the
+ * real resolver; tests swap this to force the "unresolvable" branch
+ * deterministically instead of relying on the dev environment happening to
+ * lack a sibling pi-intercom install (which the walk-up probe would find).
+ */
+let _resolveIntercomExtensionPath: () => string | undefined = resolveIntercomExtensionPath;
+export function __setIntercomResolverForTest(fn?: () => string | undefined): void {
+  _resolveIntercomExtensionPath = fn ?? resolveIntercomExtensionPath;
+}
+
 
 type AnyPi = any;
 type AnyCtx = any;
@@ -448,7 +484,7 @@ export default function curatorMainExtension(pi: AnyPi, _ctx?: AnyCtx): void {
 
       // Pre-resolve extension paths once per hook invocation (REQ-CR-06).
       const runtimeExtensionPath = resolveRuntimeExtensionPath();
-      const intercomExtensionPath = resolveIntercomExtensionPath();
+      const intercomExtensionPath = _resolveIntercomExtensionPath();
       if (!intercomExtensionPath) {
         safeNotify(
           ctx,
