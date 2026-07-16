@@ -279,6 +279,11 @@ export interface SignalMainToolDeps {
   now?: () => number;
   /** Override the writer (tests). Default: {@link writeFindingsFallback}. */
   fallbackWriter?: (dir: string, record: FallbackRecord) => Promise<string>;
+  /**
+   * Optional structured-log sink (curator runtime wires the OTel logger here).
+   * Pure: if omitted, no logging happens. Keeps the tool unit-testable.
+   */
+  onLog?: (level: "info" | "warn" | "error", msg: string, attrs?: Record<string, unknown>) => void;
 }
 
 /**
@@ -307,14 +312,24 @@ export function createSignalMainTool(
   ): Promise<{ ok: true; via: "intercom" } | { ok: false; error: string }> {
     try {
       await deps.client.send(payload);
+      deps.onLog?.("info", "signal sent via intercom", { kind: payload.details.kind });
       return { ok: true, via: "intercom" };
     } catch (firstErr) {
+      deps.onLog?.("warn", "intercom send first attempt failed; retrying", {
+        kind: payload.details.kind,
+        error: firstErr instanceof Error ? firstErr.message : String(firstErr),
+      });
       // REQ-SG-02: retry once (broker may be auto-spawning).
       try {
         await deps.client.send(payload);
+        deps.onLog?.("info", "signal sent via intercom (on retry)", { kind: payload.details.kind });
         return { ok: true, via: "intercom" };
       } catch (secondErr) {
         const msg = secondErr instanceof Error ? secondErr.message : String(secondErr);
+        deps.onLog?.("error", "intercom send failed after retry", {
+          kind: payload.details.kind,
+          error: msg,
+        });
         return {
           ok: false,
           error: `broker unreachable after retry (first: ${
@@ -387,8 +402,16 @@ export function createSignalMainTool(
           severity,
           writtenAtMs: now(),
         });
+        deps.onLog?.("warn", "signal written to fallback file", {
+          kind: payload.details.kind,
+          path: writtenPath,
+        });
         return { ok: true, via: "fallback-file", path: writtenPath };
       } catch (err) {
+        deps.onLog?.("error", "signal lost: intercom + fallback both failed", {
+          kind: payload.details.kind,
+          error: err instanceof Error ? err.message : String(err),
+        });
         return {
           ok: false,
           error: `intercom failed (${sent.error}) AND fallback write failed (${

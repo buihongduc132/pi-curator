@@ -60,6 +60,8 @@ export interface TickOptions {
    * `*.stderr` files older than `forkTTL`; missing dir is a no-op.
    */
   logsDir?: string;
+  /** Optional structured-log sink (janitor wires the OTel logger here). */
+  onLog?: (level: "info" | "warn" | "error", msg: string, attrs?: Record<string, unknown>) => void;
 }
 
 /** Classify all pids files in a directory as live/stale/dead. Pure-ish (fs). */
@@ -134,6 +136,8 @@ export async function runTick(
   const killPids = opts.killPids !== false;
   const forkTTLms = opts.forkTTLms ?? 24 * 60 * 60 * 1000;
   const result: TickResult = { swept: 0, forksDeleted: 0, logsDeleted: 0, live: 0, errors: [] };
+  const log = opts.onLog;
+  log?.("info", "janitor tick start", { pidsDir, archiveDir: opts.archiveDir, forksDir: opts.forksDir, logsDir: opts.logsDir ?? null });
 
   // ── Phase 1: sweep dead curators ──────────────────────────────────────
   const entries = await classifyPids(pidsDir, opts);
@@ -186,6 +190,7 @@ export async function runTick(
       );
       await fs.promises.rename(pidFile, archivePath);
       result.swept += 1;
+      log?.("info", "reaped dead curator", { pid: entry.pid, "persona.alias": entry.curator, "session.id": entry.mainSessionId, archivePath });
     } catch (archiveErr) {
       result.errors.push(
         `failed to archive pids file ${pidFile}: ${
@@ -264,6 +269,17 @@ export async function runTick(
         );
       }
     }
+  }
+
+  log?.("info", "janitor tick complete", {
+    swept: result.swept,
+    forksDeleted: result.forksDeleted,
+    logsDeleted: result.logsDeleted,
+    live: result.live,
+    errors: result.errors.length,
+  });
+  if (result.errors.length > 0) {
+    log?.("warn", "janitor tick had errors", { count: result.errors.length, errors: result.errors });
   }
 
   return result;
