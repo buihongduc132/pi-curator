@@ -9,7 +9,7 @@
  *     would collapse output to "").
  */
 import { describe, it, expect } from "vitest";
-import { stripThinkingBlocks, transformEntry, renderSession } from "./filter-session.js";
+import { stripThinkingBlocks, transformEntry, renderSession, analyzeFilter } from "./filter-session.js";
 
 describe("stripThinkingBlocks — actually removes thinking", () => {
   it("removes thinking blocks from an assistant message", () => {
@@ -91,5 +91,42 @@ describe("renderSession — non-empty exact format", () => {
 
   it("renders empty string when there is no header and no entries", () => {
     expect(renderSession(null, [])).toBe("");
+  });
+});
+
+describe("analyzeFilter — thinkingStripped tally (assistant only)", () => {
+  it("counts only assistant thinking blocks, not user-side thinking", () => {
+    // A user message carrying a thinking block must NOT be counted; an assistant
+    // message carrying a thinking block MUST be counted. Distinguishes the
+    // `role === "assistant"` guard (L358) and the thinking filter (L364).
+    const entries = [
+      {
+        type: "message",
+        id: "u1",
+        parentId: null,
+        message: { role: "user", content: [{ type: "thinking", thinking: "u" }, { type: "text", text: "q" }] },
+      },
+      {
+        type: "message",
+        id: "a1",
+        parentId: "u1",
+        message: { role: "assistant", content: [{ type: "thinking", thinking: "a" }, { type: "text", text: "r" }] },
+      },
+    ] as any;
+    const stats = analyzeFilter(entries, { leafId: "a1" });
+    expect(stats.thinkingStripped).toBe(1); // assistant only
+    expect(stats.kept).toBe(2);
+  });
+
+  it("counts 0 thinking stripped when includeThinking is true", () => {
+    const entries = [
+      {
+        type: "message",
+        id: "a1",
+        parentId: null,
+        message: { role: "assistant", content: [{ type: "thinking", thinking: "a" }] },
+      },
+    ] as any;
+    expect(analyzeFilter(entries, { leafId: "a1", includeThinking: true }).thinkingStripped).toBe(0);
   });
 });
