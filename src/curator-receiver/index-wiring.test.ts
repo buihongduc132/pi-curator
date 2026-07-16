@@ -31,18 +31,17 @@ function writeProjectConfig(projectRoot: string, aliases: string[]) {
 
 describe("curator-receiver entry (D1 — message_start handler calls processIncoming)", () => {
   let projectRoot: string;
-  let originalCwd: string;
 
   beforeEach(() => {
     projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "curator-rx-proj-"));
-    originalCwd = process.cwd();
-    process.chdir(projectRoot);
+    // NOTE: deliberately NOT using process.chdir() — the handler resolves the
+    // project root from ctx.cwd (passed explicitly below), and process.chdir()
+    // is unsupported inside vitest worker threads (breaks stryker mutation runs).
     writeProjectConfig(projectRoot, ["spec", "scold"]);
     clearConfigCache();
   });
 
   afterEach(() => {
-    process.chdir(originalCwd);
     fs.rmSync(projectRoot, { recursive: true, force: true });
     process.env = { ...REAL_ENV };
     clearConfigCache();
