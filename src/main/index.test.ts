@@ -22,6 +22,7 @@ import curatorMainExtensionDefault, {
   processRestartMarkers,
   resolveRuntimeExtensionPath,
   resolveIntercomExtensionPath,
+  __setIntercomResolverForTest,
   MAIN_EXTENSION_LOADED_FLAG,
 } from "./index.js";
 import { clearConfigCache } from "../util/config.js";
@@ -397,6 +398,23 @@ describe("resolveIntercomExtensionPath", () => {
     // (If it happens to resolve in some env, this still asserts a string return.)
     const r = resolveIntercomExtensionPath();
     expect(typeof r === "undefined" || typeof r === "string").toBe(true);
+  });
+
+  it("discovers pi-intercom as a git-sourced sibling (walk-up probe)", () => {
+    delete process.env.PI_INTERCOM_EXTENSION_PATH;
+    // Mirror pi's git-sourced install layout:
+    //   <tmp>/owner/pi-curator/src/main/index.ts  (this module — `here`)
+    //   <tmp>/owner/pi-intercom/index.ts          (sibling package)
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "curator-git-"));
+    const ownerDir = path.join(tmp, "owner");
+    const here = path.join(ownerDir, "pi-curator", "src", "main");
+    fs.mkdirSync(here, { recursive: true });
+    const intercomDir = path.join(ownerDir, "pi-intercom");
+    fs.mkdirSync(intercomDir, { recursive: true });
+    const intercomEntry = path.join(intercomDir, "index.ts");
+    fs.writeFileSync(intercomEntry, "// stub\n");
+    expect(resolveIntercomExtensionPath(here)).toBe(intercomEntry);
+    fs.rmSync(tmp, { recursive: true, force: true });
   });
 });
 
@@ -797,7 +815,11 @@ describe("curatorMainExtension — turn_end handler invocation", () => {
 
   it("skips spawn and notifies when the intercom extension path cannot be resolved", async () => {
     delete process.env.PI_INTERCOM_EXTENSION_PATH;
-    // Also ensure pi-intercom is not resolvable/probeable in this temp HOME.
+    // Force the resolver to return undefined via the test seam. The walk-up
+    // probe would otherwise discover a real sibling pi-intercom in the dev
+    // tree (~/<...>/bhd/pi-intercom), making this branch non-deterministic.
+    __setIntercomResolverForTest(() => undefined);
+    try {
     const handlerHolder: { fn?: Function } = {};
     const pi: any = {
       on: vi.fn((evt: string, fn: Function) => {
@@ -815,5 +837,8 @@ describe("curatorMainExtension — turn_end handler invocation", () => {
     expect(skipNotify).toBeTruthy();
     expect(skipNotify[1]).toBe("error");
     expect(spawnMock).not.toHaveBeenCalled();
+    } finally {
+      __setIntercomResolverForTest(); // restore real resolver
+    }
   });
 });
