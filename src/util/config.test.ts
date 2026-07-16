@@ -15,8 +15,12 @@
  *   - getCachedConfig (cwd-change invalidation)
  *   - enabledPersonas
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  loadConfigFile,
   stripJsonc,
   parseJsonc,
   deepMerge,
@@ -515,5 +519,338 @@ describe("DEFAULT constants", () => {
 
   it("DEFAULT_HEARTBEAT has the spec defaults", () => {
     expect(DEFAULT_HEARTBEAT).toEqual({ intervalSec: 5, staleSec: 30, deadSec: 120 });
+  });
+});
+
+// ─── stripJsonc: escape + comment edge cases (mutation survivors) ────────────
+
+describe("stripJsonc escape + comment edge cases", () => {
+  // Mutants on the in-string backslash escape handling.
+  it("preserves // inside a string after an escaped quote (escape path taken)", () => {
+    // Real stripper treats `\"` as an escaped quote (stays in string) so the
+    // trailing `// kept` is string content, NOT a line comment.
+    const input = '{ "a": "x\\" // kept" }'; // chars: { "a": "x\" // kept" }
+    expect(stripJsonc(input)).toBe(input);
+  });
+
+  it("preserves a trailing backslash at EOF inside a string (no next char)", () => {
+    // Last char is `\` inside an open string; escape must NOT read past EOF.
+    const input = '{ "a": "x\\'; // chars: { "a": "x\
+    expect(stripJsonc(input)).toBe(input);
+  });
+
+  it("does not treat a lone division slash as a comment start", () => {
+    // `ch === "/" && next === "*"` must require `*`; a lone `/` is literal.
+    const input = "{ \"a\": 1 / 2 }";
+    expect(stripJsonc(input)).toBe(input);
+  });
+
+  it("does not start a block comment on a non-slash char followed by *", () => {
+    // `ch === "/"` guard: a bare `*` outside a comment is preserved.
+    expect(stripJsonc("a*b")).toBe("a*b");
+  });
+
+  it("stops a block comment only at the real `*/` (not at a lone `/` inside)", () => {
+    // A `/` inside the block must NOT terminate it early.
+    expect(stripJsonc("/* a / b */x")).toBe("x");
+  });
+
+  it("stops a block comment only at the real `*/` (not at a lone `*` inside)", () => {
+    // A `*` inside the block must NOT terminate it early.
+    expect(stripJsonc("/* a * b */x")).toBe("x");
+  });
+
+  it("tracks single-quoted strings so // inside them is not a comment", () => {
+    // Single quotes open a string; `//x` is content, not a line comment.
+    expect(stripJsonc("{ 'a': '//x' }")).toBe("{ 'a': '//x' }");
+  });
+
+  it("handles a line comment running to EOF with no trailing newline", () => {
+    // Loop bound `i < len` must terminate at EOF.
+    expect(stripJsonc("// eof comment")).toBe("");
+  });
+
+  it("handles an unterminated block comment (runs to EOF)", () => {
+    expect(stripJsonc("/* unterminated")).toBe("");
+  });
+});
+
+// ─── deepMerge: null / undefined edge cases (mutation survivors) ─────────────
+
+describe("deepMerge null/undefined edges", () => {
+  it("treats a null override as a replacement (returns null), not a plain object", () => {
+    // isPlainObject(null) must be false; otherwise Object.entries(null) throws.
+    expect(deepMerge({ a: 1 }, null)).toBeNull();
+  });
+
+  it("does not introduce undefined-valued keys from an override", () => {
+    // `if (val === undefined) continue;` must skip undefined override values.
+    const merged = deepMerge({ a: 1 }, { b: undefined, c: 2 });
+    expect(Object.keys(merged).sort()).toEqual(["a", "c"]);
+  });
+});
+
+// ─── resolvePersona: optional field round-trip (mutation survivors) ──────────
+
+describe("resolvePersona optional fields", () => {
+  it("preserves every optional field when set", () => {
+    const p = resolvePersona("spec", {
+      goalFile: "/g.md",
+      taskPrompt: "do X",
+      model: "sonnet",
+      spawn: { everyTurns: 3 },
+      contextBudget: 12345,
+      excludeTools: ["bash"],
+      tools: ["read"],
+    });
+    expect(p.goalFile).toBe("/g.md");
+    expect(p.taskPrompt).toBe("do X");
+    expect(p.model).toBe("sonnet");
+    expect(p.spawn?.everyTurns).toBe(3);
+    expect(p.contextBudget).toBe(12345);
+    expect(p.excludeTools).toEqual(["bash"]);
+    expect(p.tools).toEqual(["read"]);
+  });
+
+  it("does NOT define optional keys when absent", () => {
+    // `if (raw.X !== undefined)` guards must not assign undefined-valued keys.
+    const p = resolvePersona("spec", {});
+    expect(Object.keys(p).sort()).toEqual(
+      ["alias", "appendDisplay", "enabled", "heartbeat", "includeThinking", "scope"].sort(),
+    );
+  });
+});
+
+// ─── validatePersona: alias + goalFile edges (mutation survivors) ────────────
+
+describe("validatePersona alias/goalFile edges", () => {
+  it("rejects a whitespace-only alias as alias_required (not alias_not_filesystem_safe)", () => {
+    // `!alias || alias.trim().length === 0` must catch " " via the trim check.
+    const p = resolvePersona(" ", { goalFile: "/g.md" });
+    const issues = validatePersona(p, { fileExists: fileExistsYes });
+    expect(issues.some((i) => i.code === "alias_required")).toBe(true);
+  });
+
+  it("reports the raw alias on the issue for a whitespace alias", () => {
+    // `alias || "<empty>"` must keep a truthy (whitespace) alias verbatim.
+    const p = resolvePersona(" ", { goalFile: "/g.md" });
+    const issues = validatePersona(p, { fileExists: fileExistsYes });
+    const req = issues.find((i) => i.code === "alias_required");
+    expect(req?.alias).toBe(" ");
+  });
+
+  it("reports '<empty>' as the alias on the issue for an empty alias", () => {
+    const p = resolvePersona("", { goalFile: "/g.md" });
+    const issues = validatePersona(p, { fileExists: fileExistsYes });
+    const req = issues.find((i) => i.code === "alias_required");
+    expect(req?.alias).toBe("<empty>");
+  });
+
+  it("does not crash or warn when goalFile is undefined", () => {
+    // `persona.goalFile !== undefined` guard must short-circuit before .length.
+    const p = resolvePersona("spec", {});
+    expect(() => validatePersona(p, { fileExists: fileExistsYes })).not.toThrow();
+    expect(validatePersona(p, { fileExists: fileExistsYes })).toEqual([]);
+  });
+
+  it("does not warn about an empty-string goalFile", () => {
+    // `persona.goalFile.length > 0` must skip the existence check for "".
+    const p = resolvePersona("spec", { goalFile: "" });
+    const issues = validatePersona(p, { fileExists: fileExistsNo });
+    expect(issues.some((i) => i.code === "goal_file_missing")).toBe(false);
+  });
+});
+
+// ─── validatePersona: default fileExists (real fs, tmpdir) ───────────────────
+
+describe("validatePersona default fileExists (real existsSync)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "curator-cfg-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("uses real existsSync when fileExists is omitted (file present → no warning)", () => {
+    const goal = join(dir, "goal.md");
+    writeFileSync(goal, "x");
+    const p = resolvePersona("spec", { goalFile: goal });
+    const issues = validatePersona(p); // no fileExists → default arrow
+    expect(issues.some((i) => i.code === "goal_file_missing")).toBe(false);
+  });
+
+  it("uses real existsSync when fileExists is omitted (file absent → warning)", () => {
+    const p = resolvePersona("spec", { goalFile: join(dir, "nope.md") });
+    const issues = validatePersona(p);
+    expect(issues.some((i) => i.code === "goal_file_missing")).toBe(true);
+  });
+});
+
+// ─── resolveMergedConfig: fileExists + janitor + issues edges ────────────────
+
+describe("resolveMergedConfig fileExists/janitor/issues edges", () => {
+  it("honors an injected fileExists (Yes) even when the goalFile is absent on disk", () => {
+    // `opts.fileExists ?? fallback` must keep the injected stub.
+    const result = resolveMergedConfig(
+      { curators: { spec: { goalFile: "/definitely/not/here-zzz" } } },
+      { fileExists: fileExistsYes },
+    );
+    expect(result.issues.some((i) => i.code === "goal_file_missing")).toBe(false);
+  });
+
+  it("forwards fileExists into validatePersona (ObjectLiteral `{}` mutant must not strip it)", () => {
+    const result = resolveMergedConfig(
+      { curators: { spec: { goalFile: "/definitely/not/here-zzz" } } },
+      { fileExists: fileExistsYes },
+    );
+    expect(result.issues).toEqual([]);
+  });
+
+  it("uses default existsSync when fileExists is omitted (real fs, tmpdir)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "curator-cfg2-"));
+    try {
+      const goal = join(dir, "g.md");
+      writeFileSync(goal, "x");
+      const r = resolveMergedConfig({ curators: { spec: { goalFile: goal } } });
+      expect(r.issues.some((i) => i.code === "goal_file_missing")).toBe(false);
+      const missing = resolveMergedConfig({ curators: { spec: { goalFile: join(dir, "no.md") } } });
+      expect(missing.issues.some((i) => i.code === "goal_file_missing")).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("deep-merges a null janitor onto defaults (does not collapse to null)", () => {
+    // `merged.janitor ?? {}` must yield {} for null, not pass null through.
+    const result = resolveMergedConfig({ curators: {}, janitor: null as never });
+    expect(result.config.janitor).toEqual(DEFAULT_JANITOR);
+  });
+
+  it("returns an empty issues array for a fully-valid config", () => {
+    const result = resolveMergedConfig(
+      { curators: { spec: { goalFile: "/g.md" } } },
+      { fileExists: fileExistsYes },
+    );
+    expect(result.issues).toEqual([]);
+  });
+});
+
+// ─── loadConfigFile: whitespace + unparseable (mutation survivors) ───────────
+
+describe("loadConfigFile (fs wrapper)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "curator-load-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns {} for a whitespace-only file (trimmed empty)", () => {
+    const f = join(dir, "ws.json");
+    writeFileSync(f, "   \n  \t  ");
+    expect(loadConfigFile(f)).toEqual({});
+  });
+
+  it("returns null for an unparseable file (never throws)", () => {
+    const f = join(dir, "bad.json");
+    writeFileSync(f, "{ not valid json ");
+    expect(loadConfigFile(f)).toBeNull();
+  });
+
+  it("returns null for a missing file", () => {
+    expect(loadConfigFile(join(dir, "missing.json"))).toBeNull();
+  });
+
+  it("parses a valid JSONC config file", () => {
+    const f = join(dir, "ok.jsonc");
+    writeFileSync(f, "{ \"curators\": { \"spec\": { \"goalFile\": \"/g.md\" } } }\n");
+    expect(loadConfigFile(f)?.curators?.spec?.goalFile).toBe("/g.md");
+  });
+});
+
+// ─── getHome / globalConfigPath / loadMergedConfig (mutation survivors) ───────
+
+describe("getHome via globalConfigPath (env-driven)", () => {
+  const save = { ...process.env };
+  afterEach(() => {
+    // Restore env precisely.
+    for (const k of Object.keys(process.env)) if (!(k in save)) delete process.env[k];
+    for (const [k, v] of Object.entries(save)) process.env[k] = v as string;
+  });
+
+  it("prefers HOME over USERPROFILE and /tmp", () => {
+    process.env.HOME = "/home/mutation-test-x";
+    delete process.env.USERPROFILE;
+    expect(globalConfigPath()).toContain("/home/mutation-test-x/.pi-curator");
+    expect(globalConfigPath()).not.toContain("/tmp/");
+  });
+
+  it("falls back to USERPROFILE when HOME is unset", () => {
+    delete process.env.HOME;
+    process.env.USERPROFILE = "C:\\Users\\mut";
+    expect(globalConfigPath()).toContain("Users");
+  });
+
+  it("falls back to /tmp when neither HOME nor USERPROFILE is set", () => {
+    delete process.env.HOME;
+    delete process.env.USERPROFILE;
+    expect(globalConfigPath()).toContain("/tmp/.pi-curator");
+  });
+});
+
+describe("loadMergedConfig homeDir / fileExists injection", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "curator-merged-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("loads the global config from the injected homeDir", () => {
+    // `opts.homeDir ?? getHome()` must use the injected homeDir. Use DISTINCT
+    // home vs project dirs so the global config is only reachable via homeDir.
+    const home = dir;
+    const proj = mkdtempSync(join(tmpdir(), "curator-proj-"));
+    mkdirSync(join(home, ".pi-curator"), { recursive: true });
+    writeFileSync(
+      join(home, ".pi-curator", "curators.json"),
+      '{ "curators": { "spec": { "goalFile": "/g.md" } } }',
+    );
+    const result = loadMergedConfig({ homeDir: home, projectRoot: proj, fileExists: fileExistsYes });
+    expect(result.config.curators.spec?.alias).toBe("spec");
+    rmSync(proj, { recursive: true, force: true });
+  });
+
+  it("forwards injected fileExists into the validation pipeline", () => {
+    // Even with a bogus goalFile, an injected fileExists:Yes suppresses warnings.
+    const home = dir;
+    const proj = mkdtempSync(join(tmpdir(), "curator-proj2-"));
+    mkdirSync(join(home, ".pi-curator"), { recursive: true });
+    writeFileSync(
+      join(home, ".pi-curator", "curators.json"),
+      '{ "curators": { "spec": { "goalFile": "/no/such/file-zzz" } } }',
+    );
+    const result = loadMergedConfig({ homeDir: home, projectRoot: proj, fileExists: fileExistsYes });
+    expect(result.issues.some((i) => i.code === "goal_file_missing")).toBe(false);
+    rmSync(proj, { recursive: true, force: true });
+  });
+});
+
+// ─── getCachedConfig: clearConfigCache effectiveness ─────────────────────────
+
+describe("clearConfigCache effectiveness", () => {
+  beforeEach(() => clearConfigCache());
+
+  it("clearConfigCache forces a recompute on the next read (new reference)", () => {
+    const opts = { projectRoot: "/tmp/proj-clear", fileExists: fileExistsYes };
+    const a = getCachedConfig(opts);
+    const cached = getCachedConfig(opts);
+    expect(cached).toBe(a); // cached before clear
+    clearConfigCache();
+    const recomputed = getCachedConfig(opts);
+    expect(recomputed).not.toBe(a); // new reference after clear
   });
 });

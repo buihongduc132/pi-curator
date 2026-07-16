@@ -18,11 +18,13 @@ import {
   estimateTokens,
   estimateEntryTokens,
   estimateContentChars,
+  getMessageFromEntry,
   isValidCutPoint,
   findValidCutPoints,
   computeBudget,
   trimSessionEntries,
   trimToWindow,
+  renderTrimmed,
   type TrimResult,
 } from "./trim-session";
 import type { SessionEntry } from "./filter-session";
@@ -445,5 +447,241 @@ describe("trimToWindow (90% budget convenience)", () => {
     expect(result.totalTokens).toBe(100010);
     // u1 alone (100000) > 81808; u2 (10) fits. Best effort keeps from u2.
     expect(result.cutIndex).toBe(1);
+  });
+});
+
+// ─── estimateContentChars: edge blocks (survivors) ────────────────────────────
+
+describe("estimateContentChars edge blocks", () => {
+  it("does not throw on a null block (counts 0)", () => {
+    expect(() => estimateContentChars([null as unknown])).not.toThrow();
+    expect(estimateContentChars([null as unknown])).toBe(0);
+  });
+
+  it("counts 0 for a primitive (non-object) block", () => {
+    expect(estimateContentChars([5 as unknown, "str" as unknown])).toBe(0);
+  });
+
+  it("counts an image block (not affected by a sibling text field)", () => {
+    // `b.type === "image"` must win over a `text` field on the same block.
+    expect(estimateContentChars([{ type: "image", text: "x" }])).toBe(4800);
+  });
+
+  it("counts 0 for a text block whose `text` is not a string", () => {
+    // `typeof b.text === "string"` guard must skip non-string text.
+    expect(estimateContentChars([{ type: "text", text: 5 as unknown }])).toBe(0);
+  });
+});
+
+// ─── estimateTokens: NaN / guard edges (survivors) ───────────────────────────
+
+describe("estimateTokens guard edges", () => {
+  it("assistant: does not throw on a null block in content", () => {
+    expect(() => estimateTokens({ role: "assistant", content: [null as unknown] })).not.toThrow();
+    expect(estimateTokens({ role: "assistant", content: [null as unknown] })).toBe(0);
+  });
+
+  it("assistant: counts 0 for a primitive block in content", () => {
+    expect(estimateTokens({ role: "assistant", content: [5 as unknown] })).toBe(0);
+  });
+
+  it("assistant: counts a text block", () => {
+    expect(estimateTokens({ role: "assistant", content: [{ type: "text", text: "1234" }] })).toBe(1);
+  });
+
+  it("assistant: counts a thinking block only when `thinking` is a string", () => {
+    expect(estimateTokens({ role: "assistant", content: [{ type: "thinking", thinking: "1234" }] })).toBe(1);
+    // non-string `thinking` must contribute 0 (no NaN).
+    const n = estimateTokens({ role: "assistant", content: [{ type: "thinking", thinking: 5 as unknown }] });
+    expect(Number.isFinite(n)).toBe(true);
+    expect(n).toBe(0);
+  });
+
+  it("assistant: does not double-count a text block that also carries a `thinking` field", () => {
+    // `b.type === "thinking"` must not fire for a text block.
+    const msg = { role: "assistant", content: [{ type: "text", text: "ab", thinking: "hidden-stuff" }] };
+    expect(estimateTokens(msg)).toBe(Math.ceil(2 / 4));
+  });
+
+  it("assistant: counts 0 for non-array content (string/number/object) without throwing", () => {
+    // `Array.isArray(content)` guard must skip non-arrays (no for...of on non-iterables).
+    expect(() => estimateTokens({ role: "assistant", content: 5 as unknown })).not.toThrow();
+    expect(estimateTokens({ role: "assistant", content: 5 as unknown })).toBe(0);
+    expect(estimateTokens({ role: "assistant", content: { x: 1 } as unknown })).toBe(0);
+    expect(estimateTokens({ role: "assistant", content: "plain" })).toBe(0);
+  });
+
+  it("assistant: counts 0 for an image block that also carries a `text` field", () => {
+    // `b.type === "text"` must win for image blocks (assistant branch has no image case).
+    expect(estimateTokens({ role: "assistant", content: [{ type: "image", text: "x" }] })).toBe(0);
+  });
+
+  it("assistant: counts 0 for a text block whose `text` is not a string (no NaN)", () => {
+    const n = estimateTokens({ role: "assistant", content: [{ type: "text", text: 5 as unknown }] });
+    expect(Number.isFinite(n)).toBe(true);
+    expect(n).toBe(0);
+  });
+
+  it("assistant: does not count a `thinking` field on a non-thinking block", () => {
+    // `b.type === "thinking"` must not fire for an image/toolCall block.
+    expect(estimateTokens({ role: "assistant", content: [{ type: "image", thinking: "secret" }] })).toBe(0);
+  });
+
+  it("assistant: toolCall with a non-string name counts only the args JSON", () => {
+    const msg = { role: "assistant", content: [{ type: "toolCall", id: "c", name: 5 as unknown, arguments: { a: 1 } }] };
+    const n = estimateTokens(msg);
+    expect(Number.isFinite(n)).toBe(true);
+    expect(n).toBe(Math.ceil(JSON.stringify({ a: 1 }).length / 4));
+  });
+
+  it("bashExecution: non-string command/output contribute 0 (no NaN)", () => {
+    const msg = { role: "bashExecution", command: 5 as unknown, output: null as unknown };
+    const n = estimateTokens(msg as Record<string, unknown> as never);
+    expect(Number.isFinite(n)).toBe(true);
+    expect(n).toBe(0);
+  });
+
+  it("branchSummary/compactionSummary: non-string summary contributes 0 (no NaN)", () => {
+    const n = estimateTokens({ role: "branchSummary", summary: 5 as unknown });
+    expect(Number.isFinite(n)).toBe(true);
+    expect(n).toBe(0);
+  });
+
+  it("unknown role with a `summary` field still counts 0 (default branch)", () => {
+    // The `default:` case must NOT fall through into the summary-counting case.
+    expect(estimateTokens({ role: "mystery", summary: "12345678" } as Record<string, unknown> as never)).toBe(0);
+  });
+});
+
+// ─── getMessageFromEntry: branch_summary + default (survivors) ────────────────
+
+describe("getMessageFromEntry edges", () => {
+  it("maps a branch_summary entry to a branchSummary-role message", () => {
+    expect(getMessageFromEntry({ type: "branch_summary", id: "b1", summary: "x" })).toEqual({
+      role: "branchSummary",
+      summary: "x",
+    });
+  });
+
+  it("returns null for an unknown entry type (does not synthesize a message)", () => {
+    // `default:` must NOT merge into the branchSummary case.
+    expect(getMessageFromEntry({ type: "unknown", summary: "x" })).toBeNull();
+    expect(estimateEntryTokens({ type: "unknown", summary: "12345678" })).toBe(0);
+  });
+});
+
+// ─── isValidCutPoint: missing-message guard (survivors) ──────────────────────
+
+describe("isValidCutPoint message guard edges", () => {
+  it("returns false for a message entry with no message field (no throw)", () => {
+    // Optional chaining `?.role` must tolerate a missing message.
+    expect(() => isValidCutPoint({ type: "message", id: "m1" })).not.toThrow();
+    expect(isValidCutPoint({ type: "message", id: "m1" })).toBe(false);
+  });
+
+  it("returns false for a toolResult message", () => {
+    expect(isValidCutPoint(toolResultEntry("t1", "out"))).toBe(false);
+  });
+
+  it("returns false for a message with an unknown role (not in the valid-cut set)", () => {
+    // `VALID_CUT_ROLES.has(role)` must reject roles outside the set even when they
+    // are strings and not "toolResult" (e.g. "system", "toolUse").
+    expect(isValidCutPoint(entry("s", "message", { role: "system", content: "x" }))).toBe(false);
+    expect(isValidCutPoint(entry("u", "message", { role: "toolUse", content: "x" }))).toBe(false);
+  });
+});
+
+// ─── trimSessionEntries: exact-fit + no-cut-points + immutability ────────────
+
+describe("trimSessionEntries boundary edges", () => {
+  it("does not trim when totalTokens === budget (exact fit)", () => {
+    // `totalTokens <= budget` must keep everything at the exact boundary.
+    const entries = [userEntry("u1", "1234"), userEntry("u2", "1234")]; // 1 + 1 = 2
+    const result = trimSessionEntries(entries, { budget: 2 });
+    expect(result.trimmed).toBe(false);
+    expect(result.cutIndex).toBe(0);
+    expect(result.entries.map((e) => e.id)).toEqual(["u1", "u2"]);
+  });
+
+  it("does not trim when totalTokens < budget", () => {
+    const entries = [userEntry("u1", "1234")]; // 1 token
+    const result = trimSessionEntries(entries, { budget: 5 });
+    expect(result.trimmed).toBe(false);
+    expect(result.cutIndex).toBe(0);
+  });
+
+  it("returns a copy of the entries array (never the input reference) when nothing is trimmed", () => {
+    const entries = [userEntry("u1", "1234")];
+    const result = trimSessionEntries(entries, { budget: 100 });
+    expect(result.entries).not.toBe(entries);
+    expect(result.entries).toEqual(entries);
+  });
+
+  it("keeps all entries when over budget but no valid cut point exists", () => {
+    // Only toolResult entries → no valid cut points → best-effort keep all from 0.
+    const entries: SessionEntry[] = [toolResultEntry("t1", "x".repeat(400))]; // 100 tokens
+    const result = trimSessionEntries(entries, { budget: 5 });
+    expect(result.cutIndex).toBe(0);
+    expect(result.keptTokens).toBe(result.totalTokens);
+    expect(result.trimmed).toBe(false); // cutIndex === 0 → not trimmed
+    expect(result.entries).toHaveLength(1);
+  });
+});
+
+// ─── trimToWindow: custom budget options (survivors) ─────────────────────────
+
+describe("trimToWindow custom budget", () => {
+  it("honors custom ceilingRatio + reserveForOutput (budget differs → trim differs)", () => {
+    // window 200000, ceilingRatio 0.6, reserve 0 → real budget 120000.
+    // u1(130000) + u2(10) = 130010 > 120000 → real trims u1, keeps u2 (cutIndex 1).
+    // Under the `{}` ObjectLiteral mutant (computeBudget opts stripped), budget
+    // becomes the default floor(200000*0.9)-8192 = 171808 → 130010 fits → no trim.
+    const entries = [
+      userEntry("u1", "x".repeat(520000)), // 130000 tokens
+      userEntry("u2", "x".repeat(40)),       // 10 tokens
+    ];
+    const result = trimToWindow(entries, 200000, { ceilingRatio: 0.6, reserveForOutput: 0 });
+    expect(result.trimmed).toBe(true);
+    expect(result.cutIndex).toBe(1);
+    expect(result.entries.map((e) => e.id)).toEqual(["u2"]);
+  });
+
+  it("forwards the computed budget into trimSessionEntries (opts ObjectLiteral mutant)", () => {
+    // A session that FITS the real budget with multiple cut points must NOT trim.
+    // Under the `{}` mutant on the trimSessionEntries opts, budget becomes NaN →
+    // forced trim from the last cut point.
+    const entries = [
+      userEntry("u1", "x".repeat(40000)), // 10000 tokens
+      userEntry("u2", "x".repeat(40000)), // 10000 tokens
+    ];
+    const result = trimToWindow(entries, 200000, { ceilingRatio: 0.6, reserveForOutput: 0 });
+    expect(result.trimmed).toBe(false);
+    expect(result.cutIndex).toBe(0);
+    expect(result.entries.map((e) => e.id)).toEqual(["u1", "u2"]);
+  });
+});
+
+// ─── renderTrimmed (survivors — previously untested) ─────────────────────────
+
+describe("renderTrimmed", () => {
+  it("returns empty string for no header and no entries", () => {
+    expect(renderTrimmed(null, [])).toBe("");
+  });
+
+  it("renders a header line when present", () => {
+    const header = { type: "session", id: "ses-1" };
+    const out = renderTrimmed(header, []);
+    expect(out).toBe(JSON.stringify(header) + "\n");
+  });
+
+  it("renders header + entries as one JSON object per line with a trailing newline", () => {
+    const header = { type: "session", id: "ses-1" };
+    const entries: SessionEntry[] = [userEntry("u1", "hi"), assistantEntry("a1", ["yo"])];
+    const out = renderTrimmed(header, entries);
+    const lines = out.split("\n");
+    expect(lines).toHaveLength(4); // 3 lines + trailing ""
+    expect(lines[0]).toBe(JSON.stringify(header));
+    expect(lines[1]).toBe(JSON.stringify(entries[0]));
+    expect(lines[2]).toBe(JSON.stringify(entries[1]));
   });
 });
