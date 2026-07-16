@@ -300,3 +300,154 @@ describe("spec conformance — scenario walkthroughs", () => {
     expect(d.append).toBeNull();
   });
 });
+
+// ─── Mutation survivor remediation (targeted TDD) ────────────────────────────
+
+describe("resolveCrossCheck — explicit valid mode/trigger values survive", () => {
+  it("preserves mode='signal-anyway' (not collapsed to default)", () => {
+    // Kills: line 78 ConditionalExpression→false + LogicalOperator→&& mutants
+    // (those would drop signal-anyway back to append-agreement).
+    const c = resolveCrossCheck({ crossCheck: { enabled: true, mode: "signal-anyway" } });
+    expect(c.mode).toBe("signal-anyway");
+  });
+  it("preserves trigger='critical-only' (not collapsed to default)", () => {
+    // Kills: line 82 ConditionalExpression→false + LogicalOperator→&& mutants.
+    const c = resolveCrossCheck({
+      crossCheck: { enabled: true, trigger: "critical-only" },
+    });
+    expect(c.trigger).toBe("critical-only");
+  });
+  it("preserves mode='append-agreement' explicitly", () => {
+    // Kills: line 78 ConditionalExpression→true (would always pick first branch,
+    // which happens to equal append-agreement — so this only documents intent).
+    const c = resolveCrossCheck({
+      crossCheck: { enabled: true, mode: "append-agreement" },
+    });
+    expect(c.mode).toBe("append-agreement");
+  });
+  it("windowMinutes: boolean true is rejected (typeof !== number → default)", () => {
+    // Kills: line 86 ConditionalExpression→true (would run Math.max(0, true)=1).
+    expect(
+      resolveCrossCheck({ crossCheck: { windowMinutes: true as never } }).windowMinutes,
+    ).toBe(10);
+  });
+  it("windowMinutes: Infinity is rejected (not finite → default)", () => {
+    // Kills: line 86 ConditionalExpression→true (Math.max(0, Infinity)=Infinity).
+    expect(
+      resolveCrossCheck({ crossCheck: { windowMinutes: Infinity } }).windowMinutes,
+    ).toBe(10);
+  });
+});
+
+describe("findMatchingPeerFinding — toEpochMs Date / number paths + ordering", () => {
+  it("accepts a Date instance as `now` (exercises toEpochMs Date branch)", () => {
+    // Kills: line 132 ConditionalExpression→false (Date no longer handled → NaN now → null).
+    const m = findMatchingPeerFinding(
+      [finding("failing-ci", "spec", -3)],
+      pending,
+      10,
+      new Date(NOW_MS),
+    );
+    expect(m?.curator).toBe("spec");
+  });
+  it("accepts an epoch-ms number as `now` (exercises toEpochMs number branch)", () => {
+    // Kills: line 133 ConditionalExpression→false (number no longer handled → Date.parse(number)).
+    const m = findMatchingPeerFinding(
+      [finding("failing-ci", "spec", -3)],
+      pending,
+      10,
+      NOW_MS,
+    );
+    expect(m?.curator).toBe("spec");
+  });
+  it("returns null when pending topic normalizes to empty (early bail)", () => {
+    // Kills: line 154 ConditionalExpression→false (would proceed and could match
+    // an empty-topic entry within the window).
+    const entries = [
+      {
+        type: "finding" as const,
+        topic: "   ",
+        curator: "x",
+        ts: NOW,
+        severity: "info" as const,
+        summary: "s",
+      },
+    ];
+    const m = findMatchingPeerFinding(
+      entries,
+      { ...pending, topic: "   " },
+      10,
+      NOW,
+    );
+    expect(m).toBeNull();
+  });
+  it("picks the most-recent match even when entries are ordered oldest-last", () => {
+    // Kills: line 165 ConditionalExpression→true (always-update would pick the
+    // last entry regardless of ts).
+    const m = findMatchingPeerFinding(
+      [finding("failing-ci", "new", -2), finding("failing-ci", "old", -8)],
+      pending,
+      10,
+      NOW,
+    );
+    expect(m?.curator).toBe("new");
+  });
+  it("first-finding-wins on equal timestamps (strict > keeps the earlier entry)", () => {
+    // Kills: line 165 EqualityOperator→>= (>= would update to the later equal entry).
+    const m = findMatchingPeerFinding(
+      [finding("failing-ci", "first", -3), finding("failing-ci", "second", -3)],
+      pending,
+      10,
+      NOW,
+    );
+    expect(m?.curator).toBe("first");
+  });
+});
+
+describe("buildFinding / buildAgreement — trim + ts coercion", () => {
+  it("buildFinding trims whitespace from topic + curator", () => {
+    // Kills: line 183/184 MethodExpression (drops .trim()).
+    const f = buildFinding(
+      { ...pending, topic: "  failing-ci  ", curator: "  quality  " },
+      NOW,
+    );
+    expect(f.topic).toBe("failing-ci");
+    expect(f.curator).toBe("quality");
+  });
+  it("buildAgreement trims whitespace from topic + curator", () => {
+    // Kills: line 202/203 MethodExpression (drops .trim()).
+    const a = buildAgreement(
+      { ...pending, topic: "  failing-ci  ", curator: "  quality  " },
+      NOW,
+    );
+    expect(a.topic).toBe("failing-ci");
+    expect(a.curator).toBe("quality");
+  });
+  it("buildAgreement accepts a Date instance for `now`", () => {
+    // Kills: line 199 outer ConditionalExpression→false + EqualityOperator
+    // (would emit the Date object / wrong branch instead of its ISO string).
+    const a = buildAgreement(pending, new Date(NOW_MS));
+    expect(a.ts).toBe(NOW);
+  });
+  it("buildAgreement accepts epoch-ms number for `now` and emits ISO string", () => {
+    // Kills: line 199 ConditionalExpression→false + EqualityOperator→!==
+    // (would emit the raw number instead of new Date(n).toISOString()).
+    const a = buildAgreement(pending, NOW_MS);
+    expect(a.ts).toBe(NOW);
+    expect(typeof a.ts).toBe("string");
+  });
+});
+
+describe("decideSignal — trigger gate is conditional on config.trigger", () => {
+  it("default trigger runs cross-check (does NOT skip for critical severity)", () => {
+    // Kills: line 235 ConditionalExpression→true (would always skip).
+    const d = decideSignal(
+      cfg({ enabled: true, trigger: "before-every-signal" }),
+      pending,
+      [finding("failing-ci", "spec", -3)],
+      NOW,
+    );
+    expect(d.signal).toBe(false); // matched → suppressed
+    expect(d.reason).toBe("first-finding-wins");
+  });
+});
