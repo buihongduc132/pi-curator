@@ -339,6 +339,47 @@ describe("withLock", () => {
       fs.chmodSync(roDir, 0o755);
     }
   });
+
+  it("timeout message omits the label substring when the holder lock has no label", async () => {
+    const lock = path.join(root, "nolabel.lock");
+    writeLockFile(
+      lock,
+      { pid: process.pid, hostname: os.hostname(), createdAt: new Date().toISOString() },
+      Date.now() / 1000,
+    );
+    let msg = "";
+    try {
+      await withLock(lock, async () => "x", { timeoutMs: 40, pollMs: 5, staleMs: 60_000 });
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    expect(msg).toContain("Timeout acquiring lock:");
+    expect(msg).toContain(lock);
+    expect(msg).toContain(`pid=${process.pid}`);
+    // No label was recorded → the label substring MUST be absent (an
+    // else-branch StringLiteral mutant would inject stray text here).
+    expect(msg).not.toMatch(/label=/);
+  });
+
+  it("timeout message omits the pid substring when the holder lock has no pid", async () => {
+    const lock = path.join(root, "nopid.lock");
+    // Different-host, no pid → unreclaimable; times out.
+    writeLockFile(
+      lock,
+      { hostname: "some-other-host", createdAt: new Date().toISOString(), label: "remote" },
+      Date.now() / 1000,
+    );
+    let msg = "";
+    try {
+      await withLock(lock, async () => "x", { timeoutMs: 40, pollMs: 5 });
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    expect(msg).toContain("Timeout acquiring lock:");
+    expect(msg).toContain("label=remote");
+    // No numeric pid recorded → the pid substring MUST be absent.
+    expect(msg).not.toMatch(/pid=/);
+  });
 });
 
 function viFn(impl?: (...a: any[]) => any) {
