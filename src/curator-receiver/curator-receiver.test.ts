@@ -1115,3 +1115,209 @@ describe("processIncoming — mutation survivor remediation", () => {
     expect(notify.mock.calls[0][1]).toBe("warning");
   });
 });
+
+// ─── FINAL mutation survivor round — deficient-ctx + content-undefined paths ──
+// These target OptionalChaining mutants on the notify calls (which need a ctx
+// that is MISSING `ui` or has `ui` without `notify`) and the content-string
+// ternary mutants (which need a message with truly-undefined content).
+
+describe("processIncoming — content truly undefined (mutation survivors L92/L135)", () => {
+  // A message with NO details.bodyText and content omitted entirely. The
+  // `typeof message.content === "string" ? ... : ""` ternaries (resolveBodyText
+  // L92 + resolveCuratorAlias L135) MUST coerce undefined → "". A cond→true
+  // mutant would thread `undefined` through and throw on `.indexOf`/`.match`,
+  // making processIncoming return false instead of true.
+  function makeNoContentEvent(senderName = "spec") {
+    // content key entirely absent; details has from but NO bodyText, NO curatorAlias.
+    return {
+      message: {
+        customType: "intercom_message",
+        details: { from: { name: senderName, id: `id-${senderName}` } },
+      },
+    };
+  }
+
+  it("re-delivers (returns true) when content is undefined and bodyText is absent", () => {
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    const result = processIncoming(makeNoContentEvent() as any, ctx as any, pi as any, ["spec"]);
+    expect(result).toBe(true);
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+    // cleanBody is "" (empty), alias falls back to the sender name.
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.content).toBe("");
+    expect(msg.details.curatorAlias).toBe("spec");
+  });
+});
+
+describe("processIncoming — severity routing exactness (mutation survivor L123)", () => {
+  // L123 `if (raw === "info" || raw === "warn" || raw === "critical") return raw;`
+  // cond→false would force resolveSeverity to always return "info". A warn
+  // finding MUST thread severity="warn" into the round-tripped details AND fire
+  // the warning-level notify — both assertions break under the mutant.
+  it("threads severity=warn into msg.details (not defaulted to info)", () => {
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    const event = {
+      message: {
+        customType: "intercom_message",
+        content: "**📨 From spec** (/p)\n\n[APPEND] note",
+        details: {
+          from: { name: "spec", id: "id-spec" },
+          bodyText: "[APPEND] note",
+          severity: "warn",
+          curatorAlias: "spec",
+        },
+      },
+    };
+    processIncoming(event as any, ctx as any, pi as any, ["spec"]);
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.details.severity).toBe("warn");
+    expect(msg.details.kind).toBe("append");
+  });
+
+  it("threads severity=critical into msg.details (not defaulted to info)", () => {
+    const pi = { sendMessage: vi.fn() };
+    const ctx = {
+      sessionManager: { getSessionId: () => "ses_main" },
+      ui: { notify: vi.fn() },
+    };
+    const event = {
+      message: {
+        customType: "intercom_message",
+        content: "**📨 From spec** (/p)\n\n[APPEND] note",
+        details: {
+          from: { name: "spec", id: "id-spec" },
+          bodyText: "[APPEND] note",
+          severity: "critical",
+          curatorAlias: "spec",
+        },
+      },
+    };
+    processIncoming(event as any, ctx as any, pi as any, ["spec"]);
+    const [msg] = pi.sendMessage.mock.calls[0];
+    expect(msg.details.severity).toBe("critical");
+    // critical overrides the recovered kind to steer.
+    expect(msg.details.kind).toBe("steer");
+  });
+});
+
+describe("processIncoming — notify OptionalChaining on deficient ctx (L280/L289/L313)", () => {
+  function severityEvent(severity: "critical" | "warn") {
+    return {
+      message: {
+        customType: "intercom_message",
+        content: "**📨 From spec** (/p)\n\n[APPEND] note",
+        details: {
+          from: { name: "spec", id: "id-spec" },
+          bodyText: "[APPEND] note",
+          severity,
+          curatorAlias: "spec",
+        },
+      },
+    };
+  }
+
+  // L280 critical-notify OptionalChaining: the critical branch notify MUST
+  // short-circuit when ctx has no `ui` / no `ui.notify` and MUST still return true.
+  it("does not throw on a CRITICAL finding when ctx has no ui", () => {
+    const pi = { sendMessage: vi.fn() };
+    const ctx = { sessionManager: { getSessionId: () => "ses_main" } } as any;
+    expect(() =>
+      processIncoming(severityEvent("critical") as any, ctx, pi as any, ["spec"]),
+    ).not.toThrow();
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw on a CRITICAL finding when ctx.ui lacks notify", () => {
+    const pi = { sendMessage: vi.fn() };
+    const ctx = { sessionManager: { getSessionId: () => "ses_main" }, ui: {} } as any;
+    expect(() =>
+      processIncoming(severityEvent("critical") as any, ctx, pi as any, ["spec"]),
+    ).not.toThrow();
+  });
+
+  // L289 warn-notify OptionalChaining.
+  it("does not throw on a WARN finding when ctx has no ui", () => {
+    const pi = { sendMessage: vi.fn() };
+    const ctx = { sessionManager: { getSessionId: () => "ses_main" } } as any;
+    expect(() =>
+      processIncoming(severityEvent("warn") as any, ctx, pi as any, ["spec"]),
+    ).not.toThrow();
+    expect(pi.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not throw on a WARN finding when ctx.ui lacks notify", () => {
+    const pi = { sendMessage: vi.fn() };
+    const ctx = { sessionManager: { getSessionId: () => "ses_main" }, ui: {} } as any;
+    expect(() =>
+      processIncoming(severityEvent("warn") as any, ctx, pi as any, ["spec"]),
+    ).not.toThrow();
+  });
+
+  // L313 safeNotifyError OptionalChaining: when the error path fires AND ctx is
+  // deficient, the receiver MUST still not throw (swallow + return false).
+  it("does not throw when pi.sendMessage throws and ctx has no ui (safeNotifyError)", () => {
+    const pi = {
+      sendMessage: vi.fn(() => {
+        throw new Error("transport down");
+      }),
+    };
+    const ctx = { sessionManager: { getSessionId: () => "ses_main" } } as any;
+    let result = true;
+    expect(() => {
+      result = processIncoming(severityEvent("critical") as any, ctx, pi as any, ["spec"]);
+    }).not.toThrow();
+    expect(result).toBe(false);
+  });
+
+  it("does not throw when pi.sendMessage throws and ctx.ui lacks notify", () => {
+    const pi = {
+      sendMessage: vi.fn(() => {
+        throw new Error("boom");
+      }),
+    };
+    const ctx = { sessionManager: { getSessionId: () => "ses_main" }, ui: {} } as any;
+    let result = true;
+    expect(() => {
+      result = processIncoming(severityEvent("warn") as any, ctx, pi as any, ["spec"]);
+    }).not.toThrow();
+    expect(result).toBe(false);
+  });
+});
+
+// L290 LogicalOperator `curatorAlias ?? "unknown"` → `curatorAlias && "unknown"`:
+// the WARN notify message MUST embed the resolved alias ("spec"), not the
+// literal "unknown" that the mutant substitutes for any truthy alias.
+describe("processIncoming — warn notify embeds the resolved alias (mutation survivor L290)", () => {
+  it("warn notify message contains the actual alias, not 'unknown'", () => {
+    const notify = vi.fn();
+    const ctx = { sessionManager: { getSessionId: () => "ses_main" }, ui: { notify } } as any;
+    const pi = { sendMessage: vi.fn() };
+    const event = {
+      message: {
+        customType: "intercom_message",
+        content: "**📨 From spec** (/p)\n\n[APPEND] note",
+        details: {
+          from: { name: "spec", id: "id-spec" },
+          bodyText: "[APPEND] note",
+          severity: "warn",
+          curatorAlias: "spec",
+        },
+      },
+    };
+    processIncoming(event as any, ctx, pi as any, ["spec"]);
+    const warnCall = notify.mock.calls.find(
+      (c) => typeof c[0] === "string" && /warning finding/.test(c[0]),
+    );
+    expect(warnCall).toBeTruthy();
+    expect(warnCall![0]).toContain("spec");
+    expect(warnCall![0]).not.toContain("unknown");
+  });
+});

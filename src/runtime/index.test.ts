@@ -621,6 +621,21 @@ describe("isMainExtensionLoaded — heuristic surface (mutation survivors)", () 
   it("returns false for a pi.extensions array with no curator match", () => {
     expect(isMainExtensionLoaded({ extensions: ["x", "y"] } as any, {})).toBe(false);
   });
+
+  // L96 / L100 ConditionalExpression survivors: the `.some` predicate
+  // `typeof e === "string" && /pi-curator|curator-main/i.test(e)` — a mutant
+  // that drops the `typeof e === "string"` guard would let a NON-STRING entry
+  // whose toString() matches the regex be reported as a curator extension. A
+  // non-string entry that stringifies to a curator name MUST be rejected.
+  it("rejects a non-string ctx.extensions entry even if it stringifies to curator", () => {
+    const sneaky = { toString: () => "curator-main" };
+    expect(isMainExtensionLoaded({}, { extensions: [sneaky] })).toBe(false);
+  });
+
+  it("rejects a non-string pi.extensions entry even if it stringifies to curator", () => {
+    const sneaky = { toString: () => "pi-curator" };
+    expect(isMainExtensionLoaded({ extensions: [sneaky] } as any, {})).toBe(false);
+  });
 });
 
 describe("curatorRuntimeExtension — intercom client wiring (mutation survivors L147/L201)", () => {
@@ -786,6 +801,108 @@ describe("curatorRuntimeExtension — registerTool optional + sessionId fallback
     expect(startHeartbeat).toHaveBeenCalledTimes(1);
     const opts = (startHeartbeat as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(opts.curatorSessionId).toBeUndefined();
+    onSpy.mockRestore();
+  });
+});
+
+// ─── FINAL mutation survivor round — precise notify OptionalChaining kills ───
+// The notify lines (`ctx?.ui?.notify?.(...)`) have THREE `?.` operators each.
+// Killing all three per line requires TWO deficient-ctx shapes:
+//   (a) ctx = { ui: {} }        → ui present, notify undefined (kills the
+//                                `notify?.(` → `notify(` and `ui?.notify` →
+//                                `ui.notify` mutants: calling undefined throws).
+//   (b) ctx = undefined | null  → kills the `ctx?.ui` → `ctx.ui` mutant
+//                                (reading `.ui` of nullish throws).
+// Each pair below covers both shapes on the relevant code path.
+
+describe("curatorRuntimeExtension — identity-absent notify OptionalChaining (L178)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearCuratorEnv();
+  });
+  afterEach(() => {
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  it("does not throw on the identity-absent notify when ctx.ui lacks notify", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = makePi();
+    expect(() => curatorRuntimeExtension(pi as any, { ui: {} } as any)).not.toThrow();
+    expect(pi.registerTool).not.toHaveBeenCalled();
+    onSpy.mockRestore();
+  });
+
+  it("does not throw on the identity-absent notify when ctx is undefined", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = makePi();
+    expect(() => curatorRuntimeExtension(pi as any, undefined)).not.toThrow();
+    expect(pi.registerTool).not.toHaveBeenCalled();
+    onSpy.mockRestore();
+  });
+
+  it("does not throw on the identity-absent notify when ctx is null", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = makePi();
+    expect(() => curatorRuntimeExtension(pi as any, null as any)).not.toThrow();
+    onSpy.mockRestore();
+  });
+});
+
+describe("curatorRuntimeExtension — heartbeat-started notify OptionalChaining (L252)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setCuratorEnv({});
+  });
+  afterEach(() => {
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  it("does not throw on the heartbeat notify when ctx.ui lacks notify", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension(makePi() as any, { ui: {} } as any);
+    expect(startHeartbeat).toHaveBeenCalledTimes(1);
+    onSpy.mockRestore();
+  });
+
+  it("does not throw on the heartbeat notify when ctx is undefined", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension(makePi() as any, undefined);
+    expect(startHeartbeat).toHaveBeenCalledTimes(1);
+    onSpy.mockRestore();
+  });
+
+  it("does not throw on the heartbeat notify when ctx is null", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension(makePi() as any, null as any);
+    expect(startHeartbeat).toHaveBeenCalledTimes(1);
+    onSpy.mockRestore();
+  });
+});
+
+describe("curatorRuntimeExtension — setup-failed notify OptionalChaining (L262)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setCuratorEnv({});
+  });
+  afterEach(() => {
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  it("does not throw on the setup-failed notify when ctx.ui lacks notify", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = { registerTool: vi.fn(() => { throw new Error("boom"); }) };
+    // registerTool throws → outer catch → setup-failed notify path.
+    expect(() => curatorRuntimeExtension(pi as any, { ui: {} } as any)).not.toThrow();
+    onSpy.mockRestore();
+  });
+
+  it("does not throw on the setup-failed notify when ctx is undefined", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = { registerTool: vi.fn(() => { throw new Error("boom"); }) };
+    expect(() => curatorRuntimeExtension(pi as any, undefined)).not.toThrow();
     onSpy.mockRestore();
   });
 });

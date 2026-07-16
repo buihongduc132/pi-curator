@@ -59,4 +59,40 @@ describe("withLock — metadata write failure", () => {
     expect(result).toBe("recovered");
     expect(fs.existsSync(lock)).toBe(false);
   });
+
+  // L167 BlockStatement (empty try) — the metadata-write-failure handler MUST
+  // close the now-open fd before unlinking. We spy on closeSync to assert it is
+  // called with a numeric fd; the mutant empties the block and skips the close.
+  it("closes the fd in the metadata-write-failure cleanup path", async () => {
+    const lock = path.join(root, "metafailclose.lock");
+    const closeSpy = vi.spyOn(fs, "closeSync");
+    failFdWrite = true;
+    try {
+      await expect(withLock(lock, async () => "x")).rejects.toThrow("disk full");
+      const numericCalls = closeSpy.mock.calls.filter((c) => typeof c[0] === "number");
+      expect(numericCalls.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      failFdWrite = false;
+      closeSpy.mockRestore();
+    }
+  });
+
+  // L178 ObjectLiteral `{ cause: writeErr }` → `{}`: the rethrown Error MUST
+  // carry the original write error as `.cause`.
+  it("preserves the write error as .cause on the rethrown metadata-write error", async () => {
+    const lock = path.join(root, "metafailcause.lock");
+    failFdWrite = true;
+    let caught: unknown;
+    try {
+      await withLock(lock, async () => "x");
+    } catch (e) {
+      caught = e;
+    }
+    failFdWrite = false;
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe("disk full");
+    expect((caught as Error).cause).toBeDefined();
+    expect((caught as Error).cause).toBeInstanceOf(Error);
+    expect(((caught as Error).cause as Error).message).toBe("disk full");
+  });
 });

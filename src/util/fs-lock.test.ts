@@ -382,6 +382,273 @@ describe("withLock", () => {
   });
 });
 
+// ─── Mutation survivor remediation (final round) ────────────────────────────
+// Each test below targets a specific Survived mutant in fs-lock.ts. See the
+// accompanying remediation notes for the full equivalent-mutant justification.
+
+describe("isPidAlive — isErrnoException null-guard (mutation survivors L26)", () => {
+  // L26 ConditionalExpression survivors: when the injected kill throws `null`,
+  // isErrnoException(null) is false (typeof null==="object" && null!==null → false).
+  // A mutant that drops the null-check (or forces the expression true) makes
+  // `"code" in null` throw a TypeError instead of returning the conservative
+  // `true`. The function MUST swallow the nullish throw and return true.
+  it("returns true (conservative) when kill throws null — no TypeError leak", () => {
+    const killThrowingNull = (): void => {
+      throw null;
+    };
+    expect(isPidAlive(100, killThrowingNull as (p: number, s: 0) => void)).toBe(true);
+  });
+
+  it("returns true (conservative) when kill throws undefined", () => {
+    const killThrowingUndef = (): void => {
+      throw undefined;
+    };
+    expect(isPidAlive(100, killThrowingUndef as (p: number, s: 0) => void)).toBe(true);
+  });
+});
+
+describe("atomicWriteJson — `if (dir)` falsy-dir branch (mutation survivor L42)", () => {
+  // L42 `if (dir)` → `if (true)`: when filePath has no "/", dir="". Original skips
+  // mkdir; mutant calls mkdir("") which throws EINVAL. A bare filename MUST write
+  // without mkdir. We clean up the cwd-relative artifact explicitly (no chdir).
+  const bareNames: string[] = [];
+  afterEach(() => {
+    for (const n of bareNames) {
+      try { fs.unlinkSync(n); } catch { /* ignore */ }
+      try { fs.unlinkSync(`${n}.tmp.${process.pid}.${Date.now()}`); } catch { /* ignore */ }
+    }
+    bareNames.length = 0;
+  });
+
+  it("writes a bare (no-slash) filename without invoking mkdir", async () => {
+    const name = `fslock-bare-async-${process.pid}-${Date.now()}.json`;
+    bareNames.push(name);
+    await atomicWriteJson(name, { flat: true });
+    expect(JSON.parse(fs.readFileSync(name, "utf8"))).toEqual({ flat: true });
+  });
+});
+
+describe("atomicWriteJsonSync — `if (dir)` falsy-dir branch (mutation survivor L54)", () => {
+  const bareNames: string[] = [];
+  afterEach(() => {
+    for (const n of bareNames) {
+      try { fs.unlinkSync(n); } catch { /* ignore */ }
+    }
+    bareNames.length = 0;
+  });
+
+  it("writes a bare (no-slash) filename without invoking mkdirSync", () => {
+    const name = `fslock-bare-sync-${process.pid}-${Date.now()}.json`;
+    bareNames.push(name);
+    atomicWriteJsonSync(name, { flat: 7 });
+    expect(JSON.parse(fs.readFileSync(name, "utf8"))).toEqual({ flat: 7 });
+  });
+});
+
+describe("withLock — label ternary (mutation survivor L121)", () => {
+  // L121 `typeof p.label === "string" ? p.label : undefined` → always `p.label`:
+  // a non-string label (e.g. number) would leak into the timeout message as
+  // `label=123`. The receiver MUST coerce non-strings to undefined so the label
+  // substring is omitted.
+  it("omits the label substring when the holder lock records a non-string label", async () => {
+    const lock = path.join(root, "nonstrlabel.lock");
+    writeLockFile(
+      lock,
+      // label is a number, pid alive → unreclaimable → times out.
+      { pid: process.pid, hostname: os.hostname(), createdAt: new Date().toISOString(), label: 12345 },
+      Date.now() / 1000,
+    );
+    let msg = "";
+    try {
+      await withLock(lock, async () => "x", { timeoutMs: 40, pollMs: 5, staleMs: 60_000 });
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    expect(msg).toContain("Timeout acquiring lock:");
+    // Non-string label MUST be coerced away — no `label=` substring may appear.
+    expect(msg).not.toMatch(/label=/);
+  });
+});
+
+describe("withLock — staleMs default (mutation survivor L144)", () => {
+  // L144 `opts.staleMs ?? 60_000` → `opts.staleMs && 60_000`: when the caller
+  // supplies a small staleMs, a stale remote-host lock (ownerAlive null) MUST be
+  // reclaimed. Under the mutant the default 60s is used instead, so a 30s-old
+  // remote lock is NOT reclaimed → timeout instead of success.
+  it("reclaims a 30s-old remote-host lock when staleMs is small", async () => {
+    const lock = path.join(root, "stalems.lock");
+    const oldSec = (Date.now() - 30_000) / 1000;
+    writeLockFile(
+      lock,
+      { pid: 4242, hostname: "remote-host-xyz", createdAt: new Date(oldSec * 1000).toISOString(), label: "r" },
+      oldSec,
+    );
+    const result = await withLock(lock, async () => "reclaimed-by-stalems", {
+      staleMs: 1_000,
+      timeoutMs: 2_000,
+    });
+    expect(result).toBe("reclaimed-by-stalems");
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+});
+
+describe("withLock — non-EEXIST errno rethrow + cause (mutation survivors L183/L184)", () => {
+  // L183 LogicalOperator (`||`→`&&`) + L183 ConditionalExpression (cond→false):
+  // a non-EEXIST errno (EACCES on a read-only dir) MUST be rethrown as a wrapped
+  // error whose message carries the original errno — NOT a generic "Timeout".
+  // Under the mutants the EACCES falls through to the wait loop and surfaces as
+  // "Timeout acquiring lock".
+  it("rethrows an EACCES open error with the errno in the message (not a timeout)", async () => {
+    if (process.getuid && process.getuid() === 0) return; // root bypasses perms
+    const roDir = path.join(root, "ro-errno");
+    fs.mkdirSync(roDir);
+    fs.chmodSync(roDir, 0o555);
+    const lock = path.join(roDir, "denied.lock");
+    try {
+      let caught: unknown;
+      try {
+        await withLock(lock, async () => "x", { timeoutMs: 300, pollMs: 10 });
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      const msg = (caught as Error).message;
+      // The wrapped message MUST carry the original errno / permission text.
+      expect(msg).toMatch(/EACCES|permission|denied/i);
+      // It must NOT be the generic timeout fallback the mutants produce.
+      expect(msg).not.toMatch(/Timeout acquiring lock/);
+      // L184 ObjectLiteral `{ cause: err }` → `{}`: the cause MUST be preserved.
+      expect((caught as Error).cause).toBeDefined();
+    } finally {
+      fs.chmodSync(roDir, 0o755);
+    }
+  });
+});
+
+describe("withLock — optional-chaining on metadata (mutation survivors L192/L193)", () => {
+  // L192 `metadata?.hostname` and L193 `metadata?.pid`: when the lock file is
+  // corrupt (non-JSON) readLockMetadata returns null. A stale corrupt lock MUST
+  // still be reclaimed (sameHost defaults true, ownerAlive null, stale → reclaim).
+  // Under the mutants `metadata.hostname` throws on null → caught → no reclaim →
+  // the call times out instead of succeeding.
+  it("reclaims a stale corrupt (non-JSON) lock file", async () => {
+    const lock = path.join(root, "stalecorrupt.lock");
+    fs.writeFileSync(lock, "{not valid json");
+    const oldSec = (Date.now() - 120_000) / 1000;
+    fs.utimesSync(lock, oldSec, oldSec);
+    const result = await withLock(lock, async () => "reclaimed-corrupt", {
+      staleMs: 1_000,
+      timeoutMs: 2_000,
+    });
+    expect(result).toBe("reclaimed-corrupt");
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+});
+
+describe("withLock — stale-but-live-owner must NOT be reclaimed (mutation survivors L195)", () => {
+  // L195 ConditionalExpression (ownerAlive!==true → true) + L195 BooleanLiteral
+  // (true→false making it ownerAlive!==false): a stale lock whose owner is ALIVE
+  // must NOT be reclaimed — the loop waits and times out. Under the mutants the
+  // stale+live lock is wrongly reclaimed → the call succeeds instead of throwing.
+  it("times out (does NOT reclaim) a stale lock owned by a live pid", async () => {
+    const lock = path.join(root, "stalelive.lock");
+    const oldSec = (Date.now() - 120_000) / 1000;
+    writeLockFile(
+      lock,
+      { pid: process.pid, hostname: os.hostname(), createdAt: new Date(oldSec * 1000).toISOString(), label: "alive" },
+      oldSec,
+    );
+    await expect(
+      withLock(lock, async () => "should-not-happen", { staleMs: 1_000, timeoutMs: 60, pollMs: 10 }),
+    ).rejects.toThrow(/Timeout acquiring lock/);
+  });
+});
+
+describe("withLock — timeout error preserves cause (mutation survivor L210)", () => {
+  // L210 ObjectLiteral `{ cause: err }` → `{}`: the timeout Error MUST carry the
+  // original EEXIST error as `.cause`.
+  it("the timeout Error carries the original EEXIST as .cause", async () => {
+    const lock = path.join(root, "cause.lock");
+    writeLockFile(
+      lock,
+      { pid: process.pid, hostname: os.hostname(), createdAt: new Date().toISOString(), label: "busy" },
+      Date.now() / 1000,
+    );
+    let caught: unknown;
+    try {
+      await withLock(lock, async () => "x", { timeoutMs: 40, pollMs: 5, staleMs: 60_000 });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toMatch(/Timeout acquiring lock/);
+    expect((caught as Error).cause).toBeDefined();
+    // The cause is the original EEXIST errno exception.
+    expect(((caught as Error).cause as NodeJS.ErrnoException).code).toBe("EEXIST");
+  });
+});
+
+describe("withLock — release path closes the fd (mutation survivors L226/L227)", () => {
+  // L226 BlockStatement (empty try) + L227 ConditionalExpression (fd!==null →
+  // false) + L227 EqualityOperator (!== → ===): on a normal acquire+release the
+  // fd MUST be closed. We can't spy on fs.closeSync (ESM namespace), so we detect
+  // a leaked fd via /proc/self/fd: each skipped close leaks one descriptor, so
+  // after several acquires the open-fd count MUST return to baseline.
+  function openFdCount(): number {
+    try {
+      return fs.readdirSync("/proc/self/fd").length;
+    } catch {
+      return -1; // non-Linux → skip assertion gracefully
+    }
+  }
+
+  it("closes the acquired fd on every release (no fd leak)", async () => {
+    const before = openFdCount();
+    if (before < 0) return; // platform without /proc/self/fd
+    for (let i = 0; i < 6; i++) {
+      const lock = path.join(root, `closefd-${i}.lock`);
+      await withLock(lock, async () => `done-${i}`, { label: `closefd-${i}` });
+    }
+    const after = openFdCount();
+    // The mutants leak +1 fd per acquire (6 total). Allow a small margin for
+    // unrelated concurrent descriptor churn, but a 5+ jump is a real leak.
+    expect(after - before).toBeLessThan(5);
+  });
+});
+
+describe("withLock — backoff timing (mutation survivors L213-L218)", () => {
+  // The exponential-backoff + jitter math only affects the SLEEP DURATION, never
+  // the acquire/timeout outcome. We assert the FIRST backoff sleep lands in the
+  // expected range for basePollMs=100 so the arithmetic mutants (which move the
+  // first delay out of band) are detected. A fresh lock held by a live owner is
+  // unreclaimable, so the loop reliably reaches the sleep branch.
+  it("first backoff sleep for basePollMs=100 lands in [90,400]ms", async () => {
+    const lock = path.join(root, "backoff.lock");
+    writeLockFile(
+      lock,
+      { pid: process.pid, hostname: os.hostname(), createdAt: new Date().toISOString(), label: "bk" },
+      Date.now() / 1000,
+    );
+    const delays: number[] = [];
+    const realSetTimeout = setTimeout;
+    const spy = vi.spyOn(globalThis, "setTimeout").mockImplementation((fn: any, ms?: number) => {
+      if (typeof ms === "number") delays.push(ms);
+      return realSetTimeout(fn, ms);
+    });
+    try {
+      await expect(
+        withLock(lock, async () => "x", { timeoutMs: 2_000, pollMs: 100, staleMs: 60_000 }),
+      ).rejects.toThrow(/Timeout acquiring lock/);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(delays.length).toBeGreaterThan(0);
+    // Original first delay ∈ [100,300]. Mutants move it to ≤75 or ≥500 or 1.
+    expect(delays[0]).toBeGreaterThanOrEqual(90);
+    expect(delays[0]).toBeLessThanOrEqual(400);
+  });
+});
+
 function viFn(impl?: (...a: any[]) => any) {
   return vi.fn(impl);
 }
