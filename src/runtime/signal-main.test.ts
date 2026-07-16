@@ -386,3 +386,133 @@ describe("createSignalMainTool", () => {
     expect(ts).toBe(424242);
   });
 });
+
+// ─── Mutation survivor remediation (targeted kills) ─────────────────────────
+
+describe("normalizeKind — mutation survivors", () => {
+  // L149 ConditionalExpression `false` + BlockStatement `{}`: a non-string
+  // kind must surface the specific validation error, not a downstream TypeError.
+  it("throws the 'must be a string' error for a non-string kind", () => {
+    expect(() => normalizeKind(123 as unknown as string)).toThrow(/must be a string/);
+    expect(() => normalizeKind(123 as unknown as string)).toThrow("got number");
+  });
+});
+
+describe("normalizeSeverity — mutation survivors", () => {
+  // L166: the `raw === null` branch — null MUST normalize to "info".
+  it("treats null as the default 'info'", () => {
+    expect(normalizeSeverity(null)).toBe("info");
+  });
+
+  // L167 ConditionalExpression `false`: typeof guard rejects non-strings.
+  it("throws the 'must be a string' error for a non-string severity", () => {
+    expect(() => normalizeSeverity(42 as unknown as string)).toThrow(/must be a string/);
+    expect(() => normalizeSeverity(42 as unknown as string)).toThrow("got number");
+  });
+
+  // L170 MethodExpression `raw`: trim().toLowerCase() must run.
+  it("trims + lowercases severity before matching", () => {
+    expect(normalizeSeverity("  WARN  ")).toBe("warn");
+    expect(normalizeSeverity("CrItIcAl")).toBe("critical");
+  });
+
+  // L171 ConditionalExpression `true` on `s !== "info"`: literal "info" round-trips.
+  it("accepts the literal severity 'info'", () => {
+    expect(normalizeSeverity("info")).toBe("info");
+    expect(normalizeSeverity("INFO")).toBe("info");
+  });
+});
+
+describe("createSignalMainTool — default clock (mutation survivor L302)", () => {
+  // L302 ArrowFunction `() => undefined`: without deps.now, writtenAtMs is real.
+  it("writes a numeric writtenAtMs when now() is not injected", async () => {
+    const client = makeFakeClient({ failNTimes: 2 });
+    let writtenAtMs: number | undefined;
+    const before = Date.now();
+    const tool = createSignalMainTool(
+      {
+        client,
+        fallbackDir: path.join(mkdtemp(), "f"),
+        fallbackWriter: async (_d, rec) => {
+          writtenAtMs = rec.writtenAtMs;
+          return "/tmp/x";
+        },
+      },
+      IDENTITY,
+    );
+    await tool.execute({ kind: "steer", message: "x" });
+    expect(typeof writtenAtMs).toBe("number");
+    expect(Number.isFinite(writtenAtMs)).toBe(true);
+    expect(writtenAtMs!).toBeGreaterThanOrEqual(before);
+  });
+});
+
+describe("createSignalMainTool — parameter schema (mutation survivors L342–L356)", () => {
+  // ObjectLiteral `{}` + ArrayDeclaration `[]` on parameter properties.
+  it("declares the kind property with type string + steer/append enum", () => {
+    const tool = createSignalMainTool(
+      { client: makeFakeClient(), fallbackDir: "/tmp" },
+      IDENTITY,
+    );
+    const kind = (tool.parameters.properties as Record<string, any>).kind;
+    expect(kind).toBeDefined();
+    expect(kind.type).toBe("string");
+    expect(kind.enum).toEqual(["steer", "append"]);
+    expect(kind.enum).toHaveLength(2);
+  });
+
+  it("declares the message property with type string", () => {
+    const tool = createSignalMainTool(
+      { client: makeFakeClient(), fallbackDir: "/tmp" },
+      IDENTITY,
+    );
+    const message = (tool.parameters.properties as Record<string, any>).message;
+    expect(message).toBeDefined();
+    expect(message.type).toBe("string");
+  });
+
+  it("declares the severity property with the full info/warn/critical enum", () => {
+    const tool = createSignalMainTool(
+      { client: makeFakeClient(), fallbackDir: "/tmp" },
+      IDENTITY,
+    );
+    const severity = (tool.parameters.properties as Record<string, any>).severity;
+    expect(severity).toBeDefined();
+    expect(severity.type).toBe("string");
+    expect(severity.enum).toEqual(["info", "warn", "critical"]);
+    expect(severity.enum).toHaveLength(3);
+  });
+
+  it("exposes all three properties (kind/message/severity)", () => {
+    const tool = createSignalMainTool(
+      { client: makeFakeClient(), fallbackDir: "/tmp" },
+      IDENTITY,
+    );
+    expect(Object.keys(tool.parameters.properties as Record<string, any>).sort()).toEqual(
+      ["kind", "message", "severity"],
+    );
+  });
+});
+
+describe("createSignalMainTool — fallback message trimming (mutation survivor L384)", () => {
+  // L384 MethodExpression `args.message`: fallback record stores TRIMMED message.
+  it("trims the message when writing the fallback record", async () => {
+    const client = makeFakeClient({ failNTimes: 2 });
+    let writtenRecord: FallbackRecord | undefined;
+    const tool = createSignalMainTool(
+      {
+        client,
+        fallbackDir: path.join(mkdtemp(), "f"),
+        now: () => 1,
+        fallbackWriter: async (_d, rec) => {
+          writtenRecord = rec;
+          return "/tmp/x";
+        },
+      },
+      IDENTITY,
+    );
+    await tool.execute({ kind: "steer", message: "   padded finding   " });
+    expect(writtenRecord).toBeDefined();
+    expect(writtenRecord!.message).toBe("padded finding");
+  });
+});
