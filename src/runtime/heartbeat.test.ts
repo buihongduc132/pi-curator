@@ -442,3 +442,309 @@ describe("startHeartbeat — curatorSessionId write-back (LD1)", () => {
     ctrl.stop();
   });
 });
+
+// ─── Mutation survivor remediation (targeted kills) ─────────────────────────
+
+describe("nextPhase — defensive fallback (mutation survivors L120)", () => {
+  // L120:14 ConditionalExpression `true` (whole signal condition) and
+  // L120:40 EqualityOperator `!==` (`current === "signaling"` → `!==`):
+  // for any phase that is NOT spawned/scanning/signaling/done, the `signal`
+  // event MUST fall through to the `: current` branch (return the unknown
+  // phase unchanged), NOT jump to "signaling".
+  it("returns the unknown phase unchanged on a 'signal' event (no jump to signaling)", () => {
+    expect(nextPhase("bogus" as CuratorPhase, "signal")).toBe("bogus");
+    expect(nextPhase("zzz" as CuratorPhase, "signal")).not.toBe("signaling");
+  });
+});
+
+describe("startHeartbeat — interval computation (mutation survivors L231)", () => {
+  // L231 LogicalOperator `&&` and ArithmeticOperator `/`: when intervalMs is
+  // NOT supplied, the scheduler MUST receive `config.intervalSec * 1000`.
+  it("derives the interval from config.intervalSec * 1000 when intervalMs is absent", () => {
+    const seenMs: number[] = [];
+    const scheduler = {
+      setInterval: (_cb: () => void, ms: number) => {
+        seenMs.push(ms);
+        return 0;
+      },
+      clearInterval: () => {},
+    };
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      // NO intervalMs → exercises config.intervalSec * 1000
+      config: { intervalSec: 7, staleSec: 30, deadSec: 120 },
+      scheduler,
+      writer: async () => "updated",
+    });
+    ctrl.stop();
+    expect(seenMs).toContain(7000);
+  });
+});
+
+describe("startHeartbeat — runTick return values + overlap (mutation survivors)", () => {
+  function noopScheduler() {
+    return {
+      setInterval: () => 0,
+      clearInterval: () => {},
+    };
+  }
+
+  // L255 BooleanLiteral `true`→`false` (`return true` on success → `return false`).
+  it("tick() resolves true when the writer returns 'updated'", async () => {
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: noopScheduler(),
+      writer: async () => "updated",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(ctrl.tick()).resolves.toBe(true);
+    ctrl.stop();
+  });
+
+  // L240 BooleanLiteral `false`→`true` (`if (stopped) return false` → `return true`).
+  it("tick() resolves false after stop()", async () => {
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: noopScheduler(),
+      writer: async () => "updated",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    ctrl.stop();
+    await expect(ctrl.tick()).resolves.toBe(false);
+  });
+
+  // L241 BooleanLiteral `false`→`true` (`if (inFlight) return false` → `return true`).
+  it("tick() resolves false while a previous tick is still in flight", async () => {
+    let resolveFirst!: () => void;
+    const first = new Promise<void>((r) => (resolveFirst = r));
+    let calls = 0;
+    const writer = async () => {
+      calls += 1;
+      if (calls === 1) await first; // block the first tick
+      return "updated" as const;
+    };
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: noopScheduler(),
+      writer,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    const pending = ctrl.tick(); // calls=1, blocks on `first`
+    await Promise.resolve();
+    await Promise.resolve();
+    // Overlapping tick while the first is in flight → must be skipped (false).
+    await expect(ctrl.tick()).resolves.toBe(false);
+    resolveFirst();
+    await pending;
+    ctrl.stop();
+  });
+});
+
+describe("startHeartbeat — not_owner/missing halts the loop (mutation survivors)", () => {
+  // L259 OptionalChaining (onError optional call), L261 ConditionalExpression
+  // false / EqualityOperator `===` (handle check → clearInterval), L262
+  // BooleanLiteral `false`→`true` (return false → return true).
+  it("clears the interval, calls onError, returns false, and stops on 'not_owner'", async () => {
+    const cleared: unknown[] = [];
+    const errors: unknown[] = [];
+    const scheduler = {
+      setInterval: () => "H1",
+      clearInterval: (h: unknown) => {
+        cleared.push(h);
+      },
+    };
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler,
+      writer: async () => "not_owner",
+      onError: (e) => errors.push(e),
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(cleared).toContain("H1");
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toMatch(/stopping loop/);
+    await expect(ctrl.tick()).resolves.toBe(false);
+  });
+
+  // L259 OptionalChaining specifically: when onError is NOT provided, the
+  // not_owner path must NOT throw and the loop still halts.
+  it("does not throw on not_owner when onError is absent, and halts the loop", async () => {
+    let calls = 0;
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: { setInterval: () => "H", clearInterval: () => {} },
+      writer: async () => {
+        calls += 1;
+        return "not_owner" as const;
+      },
+      // NOTE: no onError → exercises the optional-chaining short-circuit.
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    await expect(ctrl.tick()).resolves.toBe(false);
+    expect(calls).toBe(1);
+  });
+});
+
+describe("startHeartbeat — writer errors are swallowed (mutation survivors)", () => {
+  // L265 OptionalChaining (onError optional call) + L266 BooleanLiteral
+  // `false`→`true` (`return false` → `return true` in the catch).
+  it("tick() resolves false (never rejects) when the writer throws", async () => {
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: { setInterval: () => 0, clearInterval: () => {} },
+      writer: async () => {
+        throw new Error("disk full");
+      },
+      onError: () => {},
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(ctrl.tick()).resolves.toBe(false);
+    ctrl.stop();
+  });
+
+  // L265 OptionalChaining specifically: when onError is NOT provided, a
+  // throwing writer must still NOT reject the tick promise.
+  it("tick() resolves false (never rejects) when the writer throws and onError is absent", async () => {
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: { setInterval: () => 0, clearInterval: () => {} },
+      writer: async () => {
+        throw new Error("boom");
+      },
+      // no onError
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(ctrl.tick()).resolves.toBe(false);
+    ctrl.stop();
+  });
+});
+
+describe("startHeartbeat — stop() + undefined scheduler handle (mutation survivors)", () => {
+  // L283 BlockStatement `{}` (stop body) + L284 BooleanLiteral `false`→`true`
+  // (`stopped = true` → `stopped = false`).
+  it("stop() prevents subsequent ticks from calling the writer", async () => {
+    let calls = 0;
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: { setInterval: () => 0, clearInterval: () => {} },
+      writer: async () => {
+        calls += 1;
+        return "updated" as const;
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    const callsBefore = calls;
+    ctrl.stop();
+    await expect(ctrl.tick()).resolves.toBe(false);
+    expect(calls).toBe(callsBefore);
+  });
+
+  // L285 ConditionalExpression false / EqualityOperator `===` (handle check
+  // → clearInterval) in stop().
+  it("stop() clears the interval handle returned by the scheduler", () => {
+    const cleared: unknown[] = [];
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: {
+        setInterval: () => "HANDLE-XYZ",
+        clearInterval: (h) => cleared.push(h),
+      },
+      writer: async () => "updated",
+    });
+    ctrl.stop();
+    expect(cleared).toContain("HANDLE-XYZ");
+  });
+
+  // L261:true + L285:true (ConditionalExpression `true` — always clear even
+  // when handle is undefined).
+  it("does not call clearInterval when the scheduler handle is undefined", async () => {
+    const cleared: unknown[] = [];
+    const ctrl = startHeartbeat({
+      pidsFile: "/x",
+      pid: 1,
+      seedPhase: "scanning",
+      scheduler: {
+        setInterval: () => undefined,
+        clearInterval: (h) => cleared.push(h),
+      },
+      writer: async () => "not_owner",
+      onError: () => {},
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(cleared).toHaveLength(0);
+    ctrl.stop();
+    expect(cleared).toHaveLength(0);
+  });
+});
+
+describe("createBeforeExitHandler — error swallowing (mutation survivor L320)", () => {
+  // L320 OptionalChaining (`onError?.(err)` → `onError(err)`): when onError is
+  // NOT provided AND the writer throws, the handler MUST still resolve.
+  it("resolves (never rejects) when the writer throws and onError is absent", async () => {
+    const handler = createBeforeExitHandler("/x", 1, async () => {
+      throw new Error("fail");
+    });
+    await expect(handler()).resolves.toBeUndefined();
+  });
+
+  it("invokes onError when the writer throws and onError is provided", async () => {
+    const errors: unknown[] = [];
+    const handler = createBeforeExitHandler(
+      "/x",
+      1,
+      async () => {
+        throw new Error("fail2");
+      },
+      (e) => errors.push(e),
+    );
+    await handler();
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toContain("fail2");
+  });
+
+  it("resolves (never rejects) when onError itself throws", async () => {
+    const handler = createBeforeExitHandler(
+      "/x",
+      1,
+      async () => {
+        throw new Error("writer");
+      },
+      () => {
+        throw new Error("logger");
+      },
+    );
+    await expect(handler()).resolves.toBeUndefined();
+  });
+});
