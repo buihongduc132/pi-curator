@@ -22,6 +22,7 @@ import {
   filterSession,
   parseSession,
   filterEntries,
+  transformEntry,
   computeActiveBranchIds,
   stripThinkingBlocks,
   isContextEntryType,
@@ -472,5 +473,310 @@ describe("filterEntries (pure, no header)", () => {
     expect(kept).toHaveLength(3);
     expect(kept[2].id).toBe("e3");
     expect((kept[2].message as { role: string }).role).toBe("toolResult");
+  });
+});
+
+// ─── parseSession: non-object JSON lines + header detection (survivors) ────────
+
+describe("parseSession malformed/header edges", () => {
+  it("counts a valid-JSON-but-non-object line as malformed (e.g. a bare number)", () => {
+    const input = [
+      JSON.stringify(HEADER),
+      "42",
+      JSON.stringify(msgEntry("e1", null, "user", "hi")),
+    ].join("\n");
+    const parsed = parseSession(input);
+    expect(parsed.malformedLines).toBe(1);
+    expect(parsed.entries).toHaveLength(1);
+    expect(parsed.entries[0].id).toBe("e1");
+  });
+
+  it("counts a JSON null line as malformed", () => {
+    const input = [JSON.stringify(HEADER), "null"].join("\n");
+    const parsed = parseSession(input);
+    expect(parsed.malformedLines).toBe(1);
+    expect(parsed.entries).toHaveLength(0);
+  });
+
+  it("counts a whitespace-only line as blank (not malformed)", () => {
+    // `raw.trim()` must collapse whitespace to "" before the blank check.
+    const input = [JSON.stringify(HEADER), "   \t  ", JSON.stringify(msgEntry("e1", null, "user", "hi"))].join("\n");
+    const parsed = parseSession(input);
+    expect(parsed.blankLines).toBe(1);
+    expect(parsed.malformedLines).toBe(0);
+    expect(parsed.entries).toHaveLength(1);
+  });
+
+  it("treats the first line as header ONLY when it is type:session", () => {
+    // No session header present → first entry is a regular entry, header stays null.
+    const input = [
+      JSON.stringify(msgEntry("e1", null, "user", "hi")),
+      JSON.stringify(msgEntry("e2", "e1", "assistant", "yo")),
+    ].join("\n");
+    const parsed = parseSession(input);
+    expect(parsed.header).toBeNull();
+    expect(parsed.entries).toHaveLength(2);
+  });
+
+  it("captures only the FIRST session line as header (later session lines are entries)", () => {
+    const s1 = { ...HEADER, id: "ses-1" };
+    const s2 = { ...HEADER, id: "ses-2" };
+    const input = [JSON.stringify(s1), JSON.stringify(s2)].join("\n");
+    const parsed = parseSession(input);
+    expect(parsed.header?.id).toBe("ses-1");
+    expect(parsed.entries).toHaveLength(1);
+    expect(parsed.entries[0].id).toBe("ses-2");
+  });
+
+  it("does not re-capture a session line once a header was seen", () => {
+    // [msg, session]: msg sets headerSeen via the else-branch; the session line
+    // that follows must be pushed as a regular entry, not become the header.
+    const input = [
+      JSON.stringify(msgEntry("e1", null, "user", "hi")),
+      JSON.stringify({ ...HEADER, id: "ses-late" }),
+    ].join("\n");
+    const parsed = parseSession(input);
+    expect(parsed.header).toBeNull();
+    expect(parsed.entries).toHaveLength(2);
+  });
+});
+
+// ─── resolveLeafId: non-string / empty id handling (survivors) ────────────────
+
+describe("resolveLeafId non-string/empty id", () => {
+  it("skips entries whose id is not a string (falls back to an earlier entry)", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1" },
+      { type: "message", id: 123 as unknown as string },
+      { type: "message" }, // no id
+    ];
+    expect(resolveLeafId(entries)).toBe("e1");
+  });
+
+  it("skips entries whose id is an empty string", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1" },
+      { type: "message", id: "" },
+    ];
+    expect(resolveLeafId(entries)).toBe("e1");
+  });
+
+  it("returns null when no entry has a usable id", () => {
+    expect(resolveLeafId([{ type: "message" }, { type: "message", id: "" }])).toBeNull();
+  });
+});
+
+// ─── stripThinkingBlocks: edge blocks (survivors) ────────────────────────────
+
+describe("stripThinkingBlocks edge blocks", () => {
+  it("returns a user message with thinking blocks UNCHANGED (by reference)", () => {
+    // `if (message.role !== "assistant") return message;` must short-circuit.
+    const msg = {
+      role: "user",
+      content: [{ type: "thinking", thinking: "x" }, { type: "text", text: "y" }],
+    };
+    expect(stripThinkingBlocks(msg)).toBe(msg);
+    expect((stripThinkingBlocks(msg).content as unknown[]).length).toBe(2);
+  });
+
+  it("returns an assistant message with non-array content unchanged", () => {
+    const msg = { role: "assistant", content: null as unknown };
+    expect(stripThinkingBlocks(msg)).toBe(msg);
+    const msg2 = { role: "assistant", content: "plain" };
+    expect(stripThinkingBlocks(msg2)).toBe(msg2);
+  });
+
+  it("keeps null / non-object blocks inside assistant content (no throw)", () => {
+    const msg = {
+      role: "assistant",
+      content: [null as unknown, { type: "text", text: "y" }, 5 as unknown],
+    };
+    expect(() => stripThinkingBlocks(msg)).not.toThrow();
+    // null + number are not `thinking` blocks → preserved alongside text.
+    expect((stripThinkingBlocks(msg).content as unknown[]).length).toBe(3);
+  });
+
+  it("returns an assistant message with no thinking blocks unchanged (by reference)", () => {
+    const msg = { role: "assistant", content: [{ type: "text", text: "hi" }, { type: "toolCall", id: "c", name: "bash", arguments: {} }] };
+    expect(stripThinkingBlocks(msg)).toBe(msg);
+  });
+});
+
+// ─── transformEntry: pure-passthrough guards (survivors) ──────────────────────
+
+describe("transformEntry guards", () => {
+  it("returns a non-message entry unchanged by reference even if it has an assistant message field", () => {
+    // `if (entry.type !== "message") return entry;` must short-circuit BEFORE
+    // thinking-strip runs. An assistant-role message nested under a non-message
+    // entry must NOT be mutated.
+    const e: SessionEntry = {
+      type: "compaction",
+      id: "c1",
+      message: { role: "assistant", content: [{ type: "thinking", thinking: "x" }] },
+    };
+    expect(transformEntry(e)).toBe(e);
+    expect(((e.message as { content: unknown[] }).content)).toHaveLength(1);
+  });
+
+  it("returns a message entry with a null message unchanged (no throw)", () => {
+    const e: SessionEntry = { type: "message", id: "m1", message: null as unknown };
+    expect(() => transformEntry(e)).not.toThrow();
+    expect(transformEntry(e)).toBe(e);
+  });
+
+  it("returns a message entry with a non-object message unchanged (no throw)", () => {
+    const e: SessionEntry = { type: "message", id: "m2", message: "raw" as unknown };
+    expect(() => transformEntry(e)).not.toThrow();
+    expect(transformEntry(e)).toBe(e);
+  });
+
+  it("returns an assistant message with no thinking blocks unchanged by reference", () => {
+    // `if (cleaned === message) return entry;` must avoid a needless copy.
+    const e: SessionEntry = {
+      type: "message",
+      id: "m3",
+      message: { role: "assistant", content: [{ type: "text", text: "hi" }] },
+    };
+    expect(transformEntry(e)).toBe(e);
+  });
+});
+
+// ─── analyzeFilter: on-branch non-context + missing/null message (survivors) ─
+
+describe("analyzeFilter survivor edges", () => {
+  it("counts an on-branch non-context entry as nonContext (not kept)", () => {
+    // session_info e2 is a child of e1 and the leaf → it IS on the active branch,
+    // but it is a non-context type → must be counted as nonContext, not kept.
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "user", content: "hi" } },
+      { type: "session_info", id: "e2", parentId: "e1" },
+    ];
+    const stats = analyzeFilter(entries);
+    expect(stats.offBranch).toBe(0);
+    expect(stats.nonContext).toBe(1);
+    expect(stats.kept).toBe(1);
+    expect(stats.thinkingStripped).toBe(0);
+  });
+
+  it("does not count an id-less context entry as off-branch", () => {
+    // `if (typeof id === "string" && !active.has(id))` must skip id-less entries.
+    const entries: SessionEntry[] = [
+      { type: "message", parentId: null, message: { role: "user", content: "hi" } },
+      { type: "message", id: "e2", parentId: null, message: { role: "assistant", content: [{ type: "text", text: "y" }] } },
+    ];
+    const stats = analyzeFilter(entries);
+    expect(stats.offBranch).toBe(0);
+    expect(stats.kept).toBe(2);
+  });
+
+  it("does not count thinking stripped for a non-message entry carrying an assistant message", () => {
+    // `entry.type === "message"` guard must exclude e.g. compaction entries that
+    // happen to nest an assistant message with thinking blocks.
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "user", content: "hi" } },
+      {
+        type: "compaction",
+        id: "e2",
+        parentId: "e1",
+        message: { role: "assistant", content: [{ type: "thinking", thinking: "x" }, { type: "text", text: "y" }] },
+      },
+    ];
+    const stats = analyzeFilter(entries);
+    expect(stats.thinkingStripped).toBe(0);
+  });
+
+  it("counts a thinking block stripped from an assistant message (default)", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "user", content: "hi" } },
+      { type: "message", id: "e2", parentId: "e1", message: { role: "assistant", content: [{ type: "thinking", thinking: "x" }, { type: "text", text: "y" }] } },
+    ];
+    const stats = analyzeFilter(entries);
+    expect(stats.thinkingStripped).toBe(1);
+    expect(stats.kept).toBe(2);
+  });
+
+  it("does NOT count thinking stripped when includeThinking is true", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "assistant", content: [{ type: "thinking", thinking: "x" }] } },
+    ];
+    expect(analyzeFilter(entries, { includeThinking: true }).thinkingStripped).toBe(0);
+  });
+
+  it("does not count thinking stripped for a non-assistant message with thinking blocks", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "user", content: [{ type: "thinking", thinking: "x" }, { type: "text", text: "y" }] } },
+    ];
+    expect(analyzeFilter(entries).thinkingStripped).toBe(0);
+  });
+
+  it("does not throw on a message entry whose message is null", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: null as unknown },
+    ];
+    expect(() => analyzeFilter(entries)).not.toThrow();
+    expect(analyzeFilter(entries).kept).toBe(1);
+    expect(analyzeFilter(entries).thinkingStripped).toBe(0);
+  });
+
+  it("does not throw on a message entry with no message field", () => {
+    const entries: SessionEntry[] = [{ type: "message", id: "e1", parentId: null }];
+    expect(() => analyzeFilter(entries)).not.toThrow();
+    expect(analyzeFilter(entries).kept).toBe(1);
+  });
+
+  it("does not throw on an assistant message with non-array content", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "assistant", content: "plain" } },
+    ];
+    expect(() => analyzeFilter(entries)).not.toThrow();
+    expect(analyzeFilter(entries).thinkingStripped).toBe(0);
+  });
+
+  it("does not throw on an assistant content array containing null", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "assistant", content: [null as unknown, { type: "text", text: "y" }] } },
+    ];
+    expect(() => analyzeFilter(entries)).not.toThrow();
+    expect(analyzeFilter(entries).thinkingStripped).toBe(0);
+  });
+
+  it("does not count thinking stripped for an assistant array with no thinking blocks", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "assistant", content: [{ type: "text", text: "y" }] } },
+    ];
+    expect(analyzeFilter(entries).thinkingStripped).toBe(0);
+  });
+});
+
+// ─── filterEntries: leafId fallback + off-branch id guard (survivors) ─────────
+
+describe("filterEntries leafId/off-branch edges", () => {
+  it("returns [] when no leaf can be resolved (no string ids)", () => {
+    const entries: SessionEntry[] = [
+      { type: "message", parentId: null, message: { role: "user", content: "hi" } },
+    ];
+    expect(filterEntries(entries)).toEqual([]);
+  });
+
+  it("drops an entry whose string id is NOT on the active branch", () => {
+    // e2 has a string id but is off-branch (its parent chain doesn't reach the leaf).
+    const entries: SessionEntry[] = [
+      { type: "message", id: "e1", parentId: null, message: { role: "user", content: "hi" } },
+      { type: "message", id: "e2", parentId: "orphan", message: { role: "user", content: "x" } },
+      { type: "message", id: "e3", parentId: "e1", message: { role: "assistant", content: [{ type: "text", text: "y" }] } },
+    ];
+    const kept = filterEntries(entries);
+    expect(kept.map((e) => e.id).sort()).toEqual(["e1", "e3"]);
+  });
+
+  it("keeps a context entry that has NO id (the off-branch guard only applies to string ids)", () => {
+    // `if (typeof id === "string" && !active.has(id))` must NOT drop id-less entries.
+    const entries: SessionEntry[] = [
+      { type: "message", parentId: null, message: { role: "user", content: "no-id" } },
+      { type: "message", id: "e2", parentId: null, message: { role: "assistant", content: [{ type: "text", text: "y" }] } },
+    ];
+    const kept = filterEntries(entries);
+    expect(kept).toHaveLength(2);
+    expect(kept.some((e) => e.message && (e.message as { role: string }).role === "user")).toBe(true);
   });
 });
