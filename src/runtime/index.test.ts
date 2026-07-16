@@ -572,3 +572,220 @@ describe("curatorRuntimeExtension — signal_main tool fallback execution", () =
     onSpy.mockRestore();
   });
 });
+
+// ─── Mutation survivor remediation (targeted kills) ─────────────────────────
+//
+// These tests target specific Survived mutants. The notify OptionalChaining
+// mutants require a DEFICIENT ctx (no `ui`, or `ui` without `notify`) so the
+// short-circuit differs from the mutated eager access.
+
+describe("isMainExtensionLoaded — heuristic surface (mutation survivors)", () => {
+  beforeEach(() => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+  });
+  afterEach(() => {
+    delete process.env[MAIN_EXTENSION_LOADED_FLAG];
+  });
+
+  // L95 OptionalChaining (`(ctx as any)?.extensions` → `(ctx as any).extensions`):
+  // when ctx is nullish but pi.extensions matches, the function MUST still
+  // return true (via the pi surface). Under the mutant the null ctx throws
+  // inside the try and the whole heuristic returns false.
+  it("returns true via pi.extensions even when ctx is null", () => {
+    expect(isMainExtensionLoaded({ extensions: ["curator-main"] } as any, null)).toBe(true);
+    expect(isMainExtensionLoaded({ extensions: ["pi-curator"] } as any, undefined)).toBe(true);
+  });
+
+  // L96 MethodExpression `.some`→`.every`: a MIXED ctx.extensions array
+  // (one matching + one non-matching) must still be detected.
+  it("detects a curator entry in a mixed ctx.extensions array", () => {
+    expect(
+      isMainExtensionLoaded({}, { extensions: ["pi-curator", "unrelated"] }),
+    ).toBe(true);
+  });
+
+  // L96 ConditionalExpression `true` (the some predicate → true): a
+  // ctx.extensions array with NO curator match must NOT be reported as loaded.
+  it("returns false for a ctx.extensions array with no curator match", () => {
+    expect(isMainExtensionLoaded({}, { extensions: ["unrelated", "other"] })).toBe(false);
+  });
+
+  // L100 MethodExpression `.some`→`.every` + L100 ConditionalExpression `true`:
+  // symmetric coverage for the pi.extensions surface.
+  it("detects a curator entry in a mixed pi.extensions array", () => {
+    expect(
+      isMainExtensionLoaded({ extensions: ["curator-main", "x"] } as any, {}),
+    ).toBe(true);
+  });
+
+  it("returns false for a pi.extensions array with no curator match", () => {
+    expect(isMainExtensionLoaded({ extensions: ["x", "y"] } as any, {})).toBe(false);
+  });
+});
+
+describe("curatorRuntimeExtension — intercom client wiring (mutation survivors L147/L201)", () => {
+  let tmpHome: string;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "curator-rt-ic-"));
+    process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
+    setCuratorEnv({});
+  });
+  afterEach(() => {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  // L147 ObjectLiteral `{}` (returns {} instead of {send}), L147 ArrowFunction
+  // (`(p)=>undefined`, intercom.send never called), L201 LogicalOperator
+  // (`??`→`&&`, a truthy real client is replaced by the reject object):
+  // when a REAL intercom client is present, execute() MUST succeed via
+  // intercom and MUST actually call intercom.send.
+  it("routes execute through the real intercom client (via=intercom)", async () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = makePi();
+    const intercomSend = vi.fn(async () => undefined);
+    curatorRuntimeExtension(pi as any, {
+      sessionId: "ses_ic_real",
+      ui: { notify: vi.fn() },
+      tools: { intercom: { send: intercomSend } },
+    } as any);
+    const tool = pi.registerTool.mock.calls[0][0];
+    const res = await tool.execute({ kind: "steer", message: "hi" });
+    expect(res).toEqual({ ok: true, via: "intercom" });
+    expect(intercomSend).toHaveBeenCalledTimes(1);
+    onSpy.mockRestore();
+  });
+});
+
+describe("curatorRuntimeExtension — REQ-CR-06 warn path safety (mutation survivor L168)", () => {
+  afterEach(() => {
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  // L168 OptionalChaining — the warn notify sits OUTSIDE the try/catch, so a
+  // mutated eager access would throw out of the extension. With the main-side
+  // flag set and a deficient ctx, the extension MUST NOT throw.
+  it("does not throw on the warn path when ctx has no ui (flag set)", () => {
+    process.env[MAIN_EXTENSION_LOADED_FLAG] = "1";
+    setCuratorEnv({});
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    expect(() => curatorRuntimeExtension(makePi() as any, {} as any)).not.toThrow();
+    onSpy.mockRestore();
+  });
+
+  it("does not throw on the warn path when ctx.ui lacks notify (flag set)", () => {
+    process.env[MAIN_EXTENSION_LOADED_FLAG] = "1";
+    setCuratorEnv({});
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    expect(() =>
+      curatorRuntimeExtension(makePi() as any, { ui: {} } as any),
+    ).not.toThrow();
+    onSpy.mockRestore();
+  });
+});
+
+describe("curatorRuntimeExtension — deficient ctx still wires the tool+heartbeat (L190/L210)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setCuratorEnv({});
+  });
+  afterEach(() => {
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  // L190 (no-intercom warn) + L210 (signal_main registered warn): when ctx
+  // has no `ui`, the optional-chained notifies MUST short-circuit and the
+  // extension MUST still register the tool AND start the heartbeat.
+  it("registers the tool and starts the heartbeat even when ctx has no ui", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = makePi();
+    curatorRuntimeExtension(pi as any, {} as any);
+    expect(pi.registerTool).toHaveBeenCalledTimes(1);
+    expect(startHeartbeat).toHaveBeenCalledTimes(1);
+    onSpy.mockRestore();
+  });
+
+  it("registers the tool and starts the heartbeat even when ctx.ui lacks notify", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    const pi = makePi();
+    curatorRuntimeExtension(pi as any, { ui: {} } as any);
+    expect(pi.registerTool).toHaveBeenCalledTimes(1);
+    expect(startHeartbeat).toHaveBeenCalledTimes(1);
+    onSpy.mockRestore();
+  });
+});
+
+describe("curatorRuntimeExtension — heartbeat onError hook safety (mutation survivor L237)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setCuratorEnv({});
+  });
+  afterEach(() => {
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  // L237 OptionalChaining inside the onError closure: the closure MUST NOT
+  // throw when ctx is deficient (no ui / ui without notify / ctx undefined).
+  it("onError does not throw when ctx has no ui", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension(makePi() as any, {} as any);
+    const opts = (startHeartbeat as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(() => opts.onError(new Error("e1"))).not.toThrow();
+    onSpy.mockRestore();
+  });
+
+  it("onError does not throw when ctx.ui lacks notify", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension(makePi() as any, { ui: {} } as any);
+    const opts = (startHeartbeat as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(() => opts.onError(new Error("e2"))).not.toThrow();
+    onSpy.mockRestore();
+  });
+
+  it("onError does not throw when ctx is undefined", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension(makePi() as any, undefined);
+    const opts = (startHeartbeat as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(() => opts.onError(new Error("e3"))).not.toThrow();
+    onSpy.mockRestore();
+  });
+});
+
+describe("curatorRuntimeExtension — registerTool optional + sessionId fallback (L209/L231)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setCuratorEnv({});
+  });
+  afterEach(() => {
+    process.env = { ...REAL_ENV };
+    vi.restoreAllMocks();
+  });
+
+  // L209 OptionalChaining (`pi.registerTool?.(tool)` → `pi.registerTool(tool)`):
+  // when pi has NO registerTool method, the extension MUST still not throw and
+  // MUST still start the heartbeat.
+  it("does not throw and starts the heartbeat when pi lacks registerTool", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension({} as any, makeCtx("ses_nort") as any);
+    expect(startHeartbeat).toHaveBeenCalledTimes(1);
+    onSpy.mockRestore();
+  });
+
+  // L231 OptionalChaining (`ctx?.session?.id` → `ctx?.session.id`): when ctx
+  // has NEITHER sessionId NOR session, the curatorSessionId MUST resolve to
+  // undefined (not throw) and the heartbeat MUST still start.
+  it("starts the heartbeat with undefined curatorSessionId when ctx has no session", () => {
+    const onSpy = vi.spyOn(process, "on").mockImplementation(() => process);
+    curatorRuntimeExtension(makePi() as any, { ui: { notify: vi.fn() }, tools: {} } as any);
+    expect(startHeartbeat).toHaveBeenCalledTimes(1);
+    const opts = (startHeartbeat as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(opts.curatorSessionId).toBeUndefined();
+    onSpy.mockRestore();
+  });
+});
