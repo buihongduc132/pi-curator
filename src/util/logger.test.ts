@@ -129,6 +129,46 @@ describe("createCuratorLogger — level filtering", () => {
   });
 });
 
+describe("createCuratorLogger — env knobs", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "curator-log-env-"));
+  });
+  afterEach(() => {
+    delete process.env.PI_CURATOR_LOG_DIR;
+    delete process.env.PI_CURATOR_LOG_MAX_BYTES;
+    delete process.env.PI_CURATOR_LOG_LEVEL;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("PI_CURATOR_LOG_DIR overrides the logs base dir", () => {
+    process.env.PI_CURATOR_LOG_DIR = dir;
+    const log = createCuratorLogger({ sessionId: "ses-env", scope: "x" });
+    log.info("hi");
+    expect(fs.existsSync(path.join(dir, "ses-env", "curator.jsonl"))).toBe(true);
+  });
+
+  it("PI_CURATOR_LOG_MAX_BYTES overrides the per-file cap (triggers rotation)", () => {
+    process.env.PI_CURATOR_LOG_MAX_BYTES = "400";
+    const log = createCuratorLogger({ logsDir: dir, sessionId: "ses-cap", scope: "x" });
+    for (let i = 0; i < 20; i++) log.info("payload " + "y".repeat(40));
+    // With a 400-byte cap, rotation to .1 must have fired.
+    expect(fs.existsSync(path.join(dir, "ses-cap", "curator.jsonl.1"))).toBe(true);
+    expect(fs.statSync(path.join(dir, "ses-cap", "curator.jsonl")).size).toBeLessThanOrEqual(400);
+  });
+
+  it("PI_CURATOR_LOG_LEVEL overrides the level (drops info when level=error)", () => {
+    process.env.PI_CURATOR_LOG_LEVEL = "error";
+    const log = createCuratorLogger({ logsDir: dir, sessionId: "ses-lvl", scope: "x" });
+    log.info("dropped");
+    log.error("kept");
+    const recs = readRecords(path.join(dir, "ses-lvl", "curator.jsonl"));
+    const sevs = recs.map((r) => r.severity);
+    expect(sevs).not.toContain("INFO");
+    expect(sevs).toContain("ERROR");
+  });
+});
+
 describe("createCuratorLogger — disabled no-op", () => {
   let dir: string;
   beforeEach(() => {

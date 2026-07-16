@@ -34,6 +34,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
 
 import { filterSession, parseSession } from "../util/filter-session.js";
 import { trimSessionEntries, computeBudget } from "../util/trim-session.js";
@@ -185,16 +186,33 @@ export function buildChildEnv(
   mainSessionName: string | undefined,
   nowMs: number = Date.now(),
   parentEnv: NodeJS.ProcessEnv = process.env,
+  traceId?: string,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...parentEnv };
   env.PI_CURATOR_ALIAS = personaAlias;
   env.PI_CURATOR_MAIN_ID = mainSessionId;
   env.PI_CURATOR_MAIN_NAME = mainSessionName && mainSessionName.length > 0 ? mainSessionName : mainSessionId;
   env.PI_CURATOR_SPAWNED_AT = new Date(nowMs).toISOString();
+  // Propagate the per-spawn OTel trace.id so the curator child's runtime logger
+  // shares the same trace as the main-side spawn records (design: distributed
+  // trace across main→runtime→signal→done). crypto.randomUUID is always
+  // available in the supported Node runtimes.
+  if (traceId && traceId.length > 0) {
+    env.PI_CURATOR_TRACE_ID = traceId;
+  }
   // Strip the main-side marker so the child's runtime defensive check does
   // not false-positive on an inherited flag.
   delete env[MAIN_EXTENSION_LOADED_FLAG];
   return env;
+}
+
+/**
+ * Mint a W3C-ish 32-hex trace id (one per curator spawn). Used as the OTel
+ * trace.id so a full curator lifecycle (main spawn → runtime heartbeat →
+ * signal_main → beforeExit done) shares one trace across two processes.
+ */
+export function mintTraceId(): string {
+  return randomUUID().replaceAll("-", "").padEnd(32, "0").slice(0, 32);
 }
 
 /**
@@ -441,6 +459,12 @@ export async function handleTurnEnd(
     }
     log.info("claim acquired", { "persona.alias": persona.alias, claimPath });
 
+    // Mint a per-spawn OTel trace.id so the curator child shares one trace with
+    // the main-side spawn records (design: distributed trace across processes).
+    const traceId = mintTraceId();
+    const pLog = log.child(persona.alias, { "persona.alias": persona.alias, "trace.id": traceId });
+    pLog.info("trace started", { traceId });
+
     // D7: read the persona's goalFile contents so the task prompt is real text.
     const goalContents = readGoalContents(persona.goalFile);
 
@@ -457,6 +481,7 @@ export async function handleTurnEnd(
         intercomExtensionPath,
         goalContents,
       }).args;
+      pLog.info("argv built", { argvLen: args.length });
     } catch (err) {
       safeNotify(ctx, `curator: argv build failed for ${persona.alias}: ${err instanceof Error ? err.message : String(err)}`, "error");
       log.error("argv build failed", {
@@ -479,7 +504,7 @@ export async function handleTurnEnd(
         }),
         // D4: inject curator identity into the child env so the runtime can
         // readCuratorIdentity() and signal back to the right main session.
-        env: buildChildEnv(persona.alias, mainSessionId, mainSessionName, nowMs, parentEnv),
+        env: buildChildEnv(persona.alias, mainSessionId, mainSessionName, nowMs, parentEnv, traceId),
       });
     } catch (err) {
       safeNotify(ctx, `curator: spawn failed for ${persona.alias}: ${err instanceof Error ? err.message : String(err)}`, "error");
@@ -495,15 +520,13 @@ export async function handleTurnEnd(
     // the slot, so it is the legitimate owner. Without this, the runtime's own
     // heartbeat(child.pid) would return `not_owner` and HALT.
     if (child?.pid) {
-      log.info("curator spawned", {
-        "persona.alias": persona.alias,
+      pLog.info("curator spawned", {
         pid: child.pid,
         phase: "spawned",
       });
       try {
         await seedCuratorPid(claimPath, child.pid, { phase: "spawned", nowMs });
-        log.info("claim pid seeded", {
-          "persona.alias": persona.alias,
+        pLog.info("claim pid seeded", {
           childPid: child.pid,
           claimPath,
         });
@@ -511,8 +534,7 @@ export async function handleTurnEnd(
         // non-fatal — claim already written with placeholder pid; next
         // heartbeat may fail if this seed is missing, but the hook stays
         // non-blocking.
-        log.warn("claim pid seed failed (non-fatal)", {
-          "persona.alias": persona.alias,
+        pLog.warn("claim pid seed failed (non-fatal)", {
           childPid: child.pid,
           error: err instanceof Error ? err.message : String(err),
         });

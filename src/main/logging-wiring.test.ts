@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { handleTurnEnd } from "./index.js";
+import { handleTurnEnd, buildChildEnv } from "./index.js";
 import { clearConfigCache } from "../util/config.js";
 import { createSignalMainTool } from "../runtime/signal-main.js";
 import { runTick } from "../janitor/run-tick.js";
@@ -51,23 +51,32 @@ function writeSessionJsonl(sessionPath: string) {
 
 function mockLogger() {
   const calls: { level: string; msg: string; attrs?: Record<string, unknown> }[] = [];
-  const log = (level: string) => (msg: string, attrs?: Record<string, unknown>) =>
-    calls.push({ level, msg, attrs });
-  return {
-    calls,
-    logger: {
+  const make = (): any => {
+    const log = (level: string) => (msg: string, attrs?: Record<string, unknown>) =>
+      calls.push({ level, msg, attrs });
+    return {
       trace: log("trace"), debug: log("debug"), info: log("info"),
       warn: log("warn"), error: log("error"),
-      child: (_scope: string, extra?: Record<string, unknown>) => ({
-        trace: log("trace"), debug: log("debug"), info: log("info"),
-        warn: log("warn"), error: log("error"),
-        child: () => mockLogger().logger,
-      }),
-    } as any,
+      child: (_scope: string, _extra?: Record<string, unknown>) => make(),
+    };
   };
+  return { calls, logger: make() };
 }
 
-describe("main handleTurnEnd — logs every spawn step", () => {
+describe("buildChildEnv — trace.id propagation (D1 fix)", () => {
+  it("sets PI_CURATOR_TRACE_ID in the child env when traceId provided", () => {
+    const env = buildChildEnv("spec", "ses-main", "main", 1234, {}, "abc123");
+    expect(env.PI_CURATOR_TRACE_ID).toBe("abc123");
+    expect(env.PI_CURATOR_ALIAS).toBe("spec");
+  });
+
+  it("omits PI_CURATOR_TRACE_ID when no traceId", () => {
+    const env = buildChildEnv("spec", "ses-main", "main", 1234, {});
+    expect(env.PI_CURATOR_TRACE_ID).toBeUndefined();
+  });
+});
+
+describe("main handleTurnEnd — logs every spawn step (incl. trace.id)", () => {
   let projectRoot: string;
   let sessionPath: string;
   let goalFile: string;
@@ -94,6 +103,7 @@ describe("main handleTurnEnd — logs every spawn step", () => {
   it("emits gate-open + spawned + pid-seed records on a successful spawn", async () => {
     const { calls, logger } = mockLogger();
     const child = { pid: 4242, on: vi.fn() };
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
     await handleTurnEnd(
       {} as any,
       { ui: { notify: vi.fn(), setStatus: vi.fn() } } as any,
@@ -106,7 +116,10 @@ describe("main handleTurnEnd — logs every spawn step", () => {
         turnNumber: 5,
         runtimeExtensionPath: "/r.ts",
         intercomExtensionPath: "/i.ts",
-        spawnFn: (() => child) as any,
+        spawnFn: ((_bin: string, _args: string[], opts: { env: NodeJS.ProcessEnv }) => {
+          capturedEnv = opts.env;
+          return child;
+        }) as any,
         logger,
       },
     );
@@ -118,6 +131,13 @@ describe("main handleTurnEnd — logs every spawn step", () => {
     expect(msgs).toContain("claim pid seeded");
     const spawnRec = calls.find((c) => c.msg === "curator spawned");
     expect(spawnRec?.attrs).toMatchObject({ pid: 4242, phase: "spawned" });
+    // D1 fix: trace.id is minted per spawn AND propagated to the curator child
+    // env (PI_CURATOR_TRACE_ID) so the runtime logger shares the trace.
+    expect(capturedEnv?.PI_CURATOR_TRACE_ID).toBeDefined();
+    expect(capturedEnv?.PI_CURATOR_TRACE_ID?.length).toBe(32);
+    const traceRec = calls.find((c) => c.msg === "trace started");
+    expect(traceRec?.attrs?.traceId).toBeDefined();
+    expect((traceRec?.attrs?.traceId as string)?.length).toBe(32);
   });
 
   it("emits a gate-closed debug record (no spawn) when the gate is closed", async () => {
