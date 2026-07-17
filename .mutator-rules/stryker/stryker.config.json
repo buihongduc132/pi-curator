@@ -29,7 +29,7 @@
       "Regex"
     ]
   },
-  "coverageAnalysis": "off",
+  "coverageAnalysis": "all",
   "timeoutMS": 90000,
   "timeoutFactor": 1.5,
   "disableBail": false,
