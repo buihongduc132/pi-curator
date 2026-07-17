@@ -1,0 +1,124 @@
+[
+  {
+    "id": "20",
+    "mutatorName": "BlockStatement",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "16",
+      "17"
+    ],
+    "location": {
+      "end": {
+        "column": 8,
+        "line": 69
+      },
+      "start": {
+        "column": 17,
+        "line": 67
+      }
+    }
+  },
+  {
+    "id": "39",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "6",
+      "18",
+      "19",
+      "24",
+      "26"
+    ],
+    "location": {
+      "end": {
+        "column": 39,
+        "line": 103
+      },
+      "start": {
+        "column": 9,
+        "line": 103
+      }
+    }
+  },
+  {
+    "id": "43",
+    "mutatorName": "OptionalChaining",
+    "replacement": "process.env.DEBUG",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "6",
+      "18",
+      "19",
+      "24",
+      "26"
+    ],
+    "location": {
+      "end": {
+        "column": 61,
+        "line": 103
+      },
+      "start": {
+        "column": 43,
+        "line": 103
+      }
+    }
+  },
+  {
+    "id": "54",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "9",
+      "10",
+      "20",
+      "21",
+      "25"
+    ],
+    "location": {
+      "end": {
+        "column": 39,
+        "line": 129
+      },
+      "start": {
+        "column": 9,
+        "line": 129
+      }
+    }
+  },
+  {
+    "id": "58",
+    "mutatorName": "OptionalChaining",
+    "replacement": "process.env.DEBUG",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "9",
+      "10",
+      "20",
+      "21",
+      "25"
+    ],
+    "location": {
+      "end": {
+        "column": 61,
+        "line": 129
+      },
+      "start": {
+        "column": 43,
+        "line": 129
+      }
+    }
+  }
+]

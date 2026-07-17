@@ -1,0 +1,696 @@
+[
+  {
+    "id": "3",
+    "mutatorName": "OptionalChaining",
+    "replacement": "details.bodyText",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 51,
+    "coveredBy": [
+      "0",
+      "4",
+      "5",
+      "6",
+      "8",
+      "25",
+      "27",
+      "28",
+      "29",
+      "30",
+      "32",
+      "34",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "60",
+      "61",
+      "62",
+      "66",
+      "67",
+      "68",
+      "69",
+      "72",
+      "73",
+      "74",
+      "75",
+      "76",
+      "77",
+      "78",
+      "79",
+      "80",
+      "81",
+      "82",
+      "83",
+      "84",
+      "85"
+    ],
+    "location": {
+      "end": {
+        "column": 24,
+        "line": 89
+      },
+      "start": {
+        "column": 7,
+        "line": 89
+      }
+    }
+  },
+  {
+    "id": "28",
+    "mutatorName": "OptionalChaining",
+    "replacement": "(message.details as {\n  mainSessionId?: string;\n} | undefined).mainSessionId",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 54,
+    "coveredBy": [
+      "0",
+      "3",
+      "4",
+      "5",
+      "6",
+      "8",
+      "25",
+      "27",
+      "28",
+      "29",
+      "30",
+      "32",
+      "33",
+      "34",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "60",
+      "61",
+      "62",
+      "66",
+      "67",
+      "68",
+      "69",
+      "71",
+      "72",
+      "73",
+      "74",
+      "75",
+      "76",
+      "77",
+      "78",
+      "79",
+      "80",
+      "81",
+      "82",
+      "83",
+      "84",
+      "85"
+    ],
+    "location": {
+      "end": {
+        "column": 88,
+        "line": 113
+      },
+      "start": {
+        "column": 14,
+        "line": 113
+      }
+    }
+  },
+  {
+    "id": "34",
+    "mutatorName": "OptionalChaining",
+    "replacement": "(message.details as {\n  severity?: unknown;\n} | undefined).severity",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 51,
+    "coveredBy": [
+      "0",
+      "4",
+      "5",
+      "6",
+      "8",
+      "25",
+      "27",
+      "28",
+      "29",
+      "30",
+      "32",
+      "34",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "60",
+      "61",
+      "62",
+      "66",
+      "67",
+      "68",
+      "69",
+      "72",
+      "73",
+      "74",
+      "75",
+      "76",
+      "77",
+      "78",
+      "79",
+      "80",
+      "81",
+      "82",
+      "83",
+      "84",
+      "85"
+    ],
+    "location": {
+      "end": {
+        "column": 80,
+        "line": 122
+      },
+      "start": {
+        "column": 15,
+        "line": 122
+      }
+    }
+  },
+  {
+    "id": "40",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 51,
+    "coveredBy": [
+      "0",
+      "4",
+      "5",
+      "6",
+      "8",
+      "25",
+      "27",
+      "28",
+      "29",
+      "30",
+      "32",
+      "34",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "60",
+      "61",
+      "62",
+      "66",
+      "67",
+      "68",
+      "69",
+      "72",
+      "73",
+      "74",
+      "75",
+      "76",
+      "77",
+      "78",
+      "79",
+      "80",
+      "81",
+      "82",
+      "83",
+      "84",
+      "85"
+    ],
+    "location": {
+      "end": {
+        "column": 21,
+        "line": 123
+      },
+      "start": {
+        "column": 7,
+        "line": 123
+      }
+    }
+  },
+  {
+    "id": "51",
+    "mutatorName": "OptionalChaining",
+    "replacement": "(message.details as {\n  curatorAlias?: unknown;\n} | undefined).curatorAlias",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 51,
+    "coveredBy": [
+      "0",
+      "4",
+      "5",
+      "6",
+      "8",
+      "25",
+      "27",
+      "28",
+      "29",
+      "30",
+      "32",
+      "34",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "60",
+      "61",
+      "62",
+      "66",
+      "67",
+      "68",
+      "69",
+      "72",
+      "73",
+      "74",
+      "75",
+      "76",
+      "77",
+      "78",
+      "79",
+      "80",
+      "81",
+      "82",
+      "83",
+      "84",
+      "85"
+    ],
+    "location": {
+      "end": {
+        "column": 93,
+        "line": 132
+      },
+      "start": {
+        "column": 20,
+        "line": 132
+      }
+    }
+  },
+  {
+    "id": "68",
+    "mutatorName": "OptionalChaining",
+    "replacement": "sender.name",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "44",
+      "54",
+      "56",
+      "67",
+      "75"
+    ],
+    "location": {
+      "end": {
+        "column": 54,
+        "line": 136
+      },
+      "start": {
+        "column": 42,
+        "line": 136
+      }
+    }
+  },
+  {
+    "id": "70",
+    "mutatorName": "OptionalChaining",
+    "replacement": "(message.details as {\n  spawnedAt?: unknown;\n} | undefined).spawnedAt",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 51,
+    "coveredBy": [
+      "0",
+      "4",
+      "5",
+      "6",
+      "8",
+      "25",
+      "27",
+      "28",
+      "29",
+      "30",
+      "32",
+      "34",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "60",
+      "61",
+      "62",
+      "66",
+      "67",
+      "68",
+      "69",
+      "72",
+      "73",
+      "74",
+      "75",
+      "76",
+      "77",
+      "78",
+      "79",
+      "80",
+      "81",
+      "82",
+      "83",
+      "84",
+      "85"
+    ],
+    "location": {
+      "end": {
+        "column": 82,
+        "line": 141
+      },
+      "start": {
+        "column": 15,
+        "line": 141
+      }
+    }
+  },
+  {
+    "id": "126",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui.notify",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 8,
+    "coveredBy": [
+      "4",
+      "40",
+      "55",
+      "56",
+      "73",
+      "77",
+      "78",
+      "79"
+    ],
+    "location": {
+      "end": {
+        "column": 24,
+        "line": 280
+      },
+      "start": {
+        "column": 9,
+        "line": 280
+      }
+    }
+  },
+  {
+    "id": "125",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui?.notify(`curator:${curatorAlias ?? \"unknown\"} CRITICAL finding \u2014 force-steered`, \"error\")",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 8,
+    "coveredBy": [
+      "4",
+      "40",
+      "55",
+      "56",
+      "73",
+      "77",
+      "78",
+      "79"
+    ],
+    "location": {
+      "end": {
+        "column": 10,
+        "line": 283
+      },
+      "start": {
+        "column": 9,
+        "line": 280
+      }
+    }
+  },
+  {
+    "id": "127",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx.ui",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 8,
+    "coveredBy": [
+      "4",
+      "40",
+      "55",
+      "56",
+      "73",
+      "77",
+      "78",
+      "79"
+    ],
+    "location": {
+      "end": {
+        "column": 16,
+        "line": 280
+      },
+      "start": {
+        "column": 9,
+        "line": 280
+      }
+    }
+  },
+  {
+    "id": "139",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui.notify",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 7,
+    "coveredBy": [
+      "38",
+      "41",
+      "74",
+      "76",
+      "80",
+      "81",
+      "84"
+    ],
+    "location": {
+      "end": {
+        "column": 24,
+        "line": 289
+      },
+      "start": {
+        "column": 9,
+        "line": 289
+      }
+    }
+  },
+  {
+    "id": "138",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui?.notify(`curator:${curatorAlias ?? \"unknown\"} warning finding`, \"warning\")",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 7,
+    "coveredBy": [
+      "38",
+      "41",
+      "74",
+      "76",
+      "80",
+      "81",
+      "84"
+    ],
+    "location": {
+      "end": {
+        "column": 10,
+        "line": 292
+      },
+      "start": {
+        "column": 9,
+        "line": 289
+      }
+    }
+  },
+  {
+    "id": "140",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx.ui",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 7,
+    "coveredBy": [
+      "38",
+      "41",
+      "74",
+      "76",
+      "80",
+      "81",
+      "84"
+    ],
+    "location": {
+      "end": {
+        "column": 16,
+        "line": 289
+      },
+      "start": {
+        "column": 9,
+        "line": 289
+      }
+    }
+  },
+  {
+    "id": "151",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui?.notify(message, \"error\")",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "30",
+      "61",
+      "63",
+      "82",
+      "83"
+    ],
+    "location": {
+      "end": {
+        "column": 40,
+        "line": 313
+      },
+      "start": {
+        "column": 5,
+        "line": 313
+      }
+    }
+  },
+  {
+    "id": "153",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx.ui",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "30",
+      "61",
+      "63",
+      "82",
+      "83"
+    ],
+    "location": {
+      "end": {
+        "column": 12,
+        "line": 313
+      },
+      "start": {
+        "column": 5,
+        "line": 313
+      }
+    }
+  },
+  {
+    "id": "152",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui.notify",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "30",
+      "61",
+      "63",
+      "82",
+      "83"
+    ],
+    "location": {
+      "end": {
+        "column": 20,
+        "line": 313
+      },
+      "start": {
+        "column": 5,
+        "line": 313
+      }
+    }
+  }
+]

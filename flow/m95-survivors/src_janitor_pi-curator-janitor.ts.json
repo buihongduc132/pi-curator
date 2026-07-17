@@ -1,0 +1,354 @@
+[
+  {
+    "id": "29",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 15,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14"
+    ],
+    "location": {
+      "end": {
+        "column": 82,
+        "line": 50
+      },
+      "start": {
+        "column": 22,
+        "line": 50
+      }
+    }
+  },
+  {
+    "id": "31",
+    "mutatorName": "ArrayDeclaration",
+    "replacement": "[\"Stryker was here\"]",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 15,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14"
+    ],
+    "location": {
+      "end": {
+        "column": 33,
+        "line": 54
+      },
+      "start": {
+        "column": 31,
+        "line": 54
+      }
+    }
+  },
+  {
+    "id": "30",
+    "mutatorName": "LogicalOperator",
+    "replacement": "logsDir && null",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 15,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14"
+    ],
+    "location": {
+      "end": {
+        "column": 80,
+        "line": 50
+      },
+      "start": {
+        "column": 65,
+        "line": 50
+      }
+    }
+  },
+  {
+    "id": "33",
+    "mutatorName": "MethodExpression",
+    "replacement": "fs.readdirSync(pidsRoot, {\n  withFileTypes: true\n})",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 15,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14"
+    ],
+    "location": {
+      "end": {
+        "column": 38,
+        "line": 58
+      },
+      "start": {
+        "column": 19,
+        "line": 56
+      }
+    }
+  },
+  {
+    "id": "38",
+    "mutatorName": "BlockStatement",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "1",
+      "6"
+    ],
+    "location": {
+      "end": {
+        "column": 4,
+        "line": 62
+      },
+      "start": {
+        "column": 11,
+        "line": 60
+      }
+    }
+  },
+  {
+    "id": "39",
+    "mutatorName": "ArrayDeclaration",
+    "replacement": "[\"Stryker was here\"]",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "1",
+      "6"
+    ],
+    "location": {
+      "end": {
+        "column": 21,
+        "line": 61
+      },
+      "start": {
+        "column": 19,
+        "line": 61
+      }
+    }
+  },
+  {
+    "id": "44",
+    "mutatorName": "ArrowFunction",
+    "replacement": "() => undefined",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 15,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14"
+    ],
+    "location": {
+      "end": {
+        "column": 60,
+        "line": 78
+      },
+      "start": {
+        "column": 14,
+        "line": 78
+      }
+    }
+  },
+  {
+    "id": "87",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": true,
+    "testsCompleted": 15,
+    "coveredBy": [],
+    "location": {
+      "end": {
+        "column": 116,
+        "line": 125
+      },
+      "start": {
+        "column": 25,
+        "line": 125
+      }
+    }
+  },
+  {
+    "id": "86",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": true,
+    "testsCompleted": 15,
+    "coveredBy": [],
+    "location": {
+      "end": {
+        "column": 116,
+        "line": 125
+      },
+      "start": {
+        "column": 25,
+        "line": 125
+      }
+    }
+  },
+  {
+    "id": "88",
+    "mutatorName": "LogicalOperator",
+    "replacement": "process.argv[1] || path.resolve(process.argv[1]) === import.meta.url.replace(\"file://\", \"\")",
+    "status": "Survived",
+    "static": true,
+    "testsCompleted": 15,
+    "coveredBy": [],
+    "location": {
+      "end": {
+        "column": 116,
+        "line": 125
+      },
+      "start": {
+        "column": 25,
+        "line": 125
+      }
+    }
+  },
+  {
+    "id": "89",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": true,
+    "testsCompleted": 15,
+    "coveredBy": [],
+    "location": {
+      "end": {
+        "column": 116,
+        "line": 125
+      },
+      "start": {
+        "column": 44,
+        "line": 125
+      }
+    }
+  },
+  {
+    "id": "90",
+    "mutatorName": "EqualityOperator",
+    "replacement": "path.resolve(process.argv[1]) !== import.meta.url.replace(\"file://\", \"\")",
+    "status": "Survived",
+    "static": true,
+    "testsCompleted": 15,
+    "coveredBy": [],
+    "location": {
+      "end": {
+        "column": 116,
+        "line": 125
+      },
+      "start": {
+        "column": 44,
+        "line": 125
+      }
+    }
+  },
+  {
+    "id": "93",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": true,
+    "testsCompleted": 15,
+    "coveredBy": [],
+    "location": {
+      "end": {
+        "column": 20,
+        "line": 126
+      },
+      "start": {
+        "column": 5,
+        "line": 126
+      }
+    }
+  },
+  {
+    "id": "94",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": true,
+    "testsCompleted": 15,
+    "coveredBy": [],
+    "location": {
+      "end": {
+        "column": 20,
+        "line": 126
+      },
+      "start": {
+        "column": 5,
+        "line": 126
+      }
+    }
+  }
+]

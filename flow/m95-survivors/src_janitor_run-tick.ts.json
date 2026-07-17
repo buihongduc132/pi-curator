@@ -1,0 +1,525 @@
+[
+  {
+    "id": "16",
+    "mutatorName": "BlockStatement",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 1,
+    "coveredBy": [
+      "26"
+    ],
+    "location": {
+      "end": {
+        "column": 6,
+        "line": 94
+      },
+      "start": {
+        "column": 13,
+        "line": 92
+      }
+    }
+  },
+  {
+    "id": "42",
+    "mutatorName": "LogicalOperator",
+    "replacement": "opts.logsDir && null",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 16,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21"
+    ],
+    "location": {
+      "end": {
+        "column": 133,
+        "line": 140
+      },
+      "start": {
+        "column": 113,
+        "line": 140
+      }
+    }
+  },
+  {
+    "id": "41",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 16,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21"
+    ],
+    "location": {
+      "end": {
+        "column": 135,
+        "line": 140
+      },
+      "start": {
+        "column": 39,
+        "line": 140
+      }
+    }
+  },
+  {
+    "id": "79",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 4,
+    "coveredBy": [
+      "7",
+      "12",
+      "20",
+      "21"
+    ],
+    "location": {
+      "end": {
+        "column": 142,
+        "line": 193
+      },
+      "start": {
+        "column": 44,
+        "line": 193
+      }
+    }
+  },
+  {
+    "id": "84",
+    "mutatorName": "ArrayDeclaration",
+    "replacement": "[\"Stryker was here\"]",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 10,
+    "coveredBy": [
+      "10",
+      "11",
+      "22",
+      "23",
+      "25",
+      "26",
+      "28",
+      "35",
+      "36",
+      "37"
+    ],
+    "location": {
+      "end": {
+        "column": 15,
+        "line": 208
+      },
+      "start": {
+        "column": 13,
+        "line": 208
+      }
+    }
+  },
+  {
+    "id": "104",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 31,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 19,
+        "line": 240
+      },
+      "start": {
+        "column": 7,
+        "line": 240
+      }
+    }
+  },
+  {
+    "id": "127",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 16,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21"
+    ],
+    "location": {
+      "end": {
+        "column": 4,
+        "line": 280
+      },
+      "start": {
+        "column": 42,
+        "line": 274
+      }
+    }
+  },
+  {
+    "id": "130",
+    "mutatorName": "EqualityOperator",
+    "replacement": "result.errors.length >= 0",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 31,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 31,
+        "line": 281
+      },
+      "start": {
+        "column": 7,
+        "line": 281
+      }
+    }
+  },
+  {
+    "id": "129",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 31,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 31,
+        "line": 281
+      },
+      "start": {
+        "column": 7,
+        "line": 281
+      }
+    }
+  },
+  {
+    "id": "128",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 31,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 31,
+        "line": 281
+      },
+      "start": {
+        "column": 7,
+        "line": 281
+      }
+    }
+  },
+  {
+    "id": "133",
+    "mutatorName": "OptionalChaining",
+    "replacement": "log(\"warn\", \"janitor tick had errors\", {\n  count: result.errors.length,\n  errors: result.errors\n})",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 1,
+    "coveredBy": [
+      "15"
+    ],
+    "location": {
+      "end": {
+        "column": 101,
+        "line": 282
+      },
+      "start": {
+        "column": 5,
+        "line": 282
+      }
+    }
+  },
+  {
+    "id": "132",
+    "mutatorName": "BlockStatement",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 1,
+    "coveredBy": [
+      "15"
+    ],
+    "location": {
+      "end": {
+        "column": 4,
+        "line": 283
+      },
+      "start": {
+        "column": 33,
+        "line": 281
+      }
+    }
+  },
+  {
+    "id": "136",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 1,
+    "coveredBy": [
+      "15"
+    ],
+    "location": {
+      "end": {
+        "column": 100,
+        "line": 282
+      },
+      "start": {
+        "column": 46,
+        "line": 282
+      }
+    }
+  },
+  {
+    "id": "131",
+    "mutatorName": "EqualityOperator",
+    "replacement": "result.errors.length <= 0",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 31,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 31,
+        "line": 281
+      },
+      "start": {
+        "column": 7,
+        "line": 281
+      }
+    }
+  },
+  {
+    "id": "140",
+    "mutatorName": "BlockStatement",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "11",
+      "28"
+    ],
+    "location": {
+      "end": {
+        "column": 4,
+        "line": 299
+      },
+      "start": {
+        "column": 11,
+        "line": 297
+      }
+    }
+  }
+]
