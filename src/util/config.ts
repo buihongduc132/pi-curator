@@ -196,7 +196,6 @@ export function stripJsonc(input: string): string {
     if (ch === "/" && next === "*") {
       // block comment — skip to closing */
       i += 2;
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       while (i < len && !(input[i] === "*" && input[i + 1] === "/")) i += 1;
       i += 2; // skip closing */
       continue;
@@ -234,7 +233,6 @@ export function deepMerge<T>(base: T, override: unknown): T {
   const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   for (const [key, val] of Object.entries(override as Record<string, unknown>)) {
     if (val === undefined) continue;
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     if (key in result) {
       result[key] = deepMerge(result[key], val);
     } else {
@@ -402,7 +400,6 @@ export function resolveMergedConfig(
   opts: { fileExists?: (p: string) => boolean; projectRoot?: string } = {},
 ): LoadedConfig {
   const fileExists = opts.fileExists ?? ((p: string) => existsSync(p));
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   const projectRoot = opts.projectRoot ?? "";
   const issues: ConfigValidationIssue[] = [];
   const resolvedCurators: Record<string, ResolvedPersona> = {};
@@ -418,7 +415,6 @@ export function resolveMergedConfig(
       resolvedCurators[alias] = { ...persona, enabled: false };
     } else {
       // scope "all-sessions" warning ⇒ treat as main-only (v1).
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       if (persona.scope === "all-sessions") {
         resolvedCurators[alias] = { ...persona, scope: "main-only" };
       } else {

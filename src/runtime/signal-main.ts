@@ -312,7 +312,6 @@ export function createSignalMainTool(
   ): Promise<{ ok: true; via: "intercom" } | { ok: false; error: string }> {
     try {
       await deps.client.send(payload);
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       deps.onLog?.("info", "signal sent via intercom", { kind: payload.details.kind });
       return { ok: true, via: "intercom" };
     } catch (firstErr) {

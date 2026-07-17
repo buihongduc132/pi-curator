@@ -50,7 +50,6 @@ export function estimateContentChars(content: unknown): number {
   if (!Array.isArray(content)) return 0;
   let chars = 0;
   for (const block of content) {
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     if (typeof block !== "object" || block === null) continue;
     const b = block as ContentBlock;
     if (b.type === "text" && typeof b.text === "string") chars += b.text.length;
@@ -84,7 +83,6 @@ export function estimateTokens(message: MessageLike): number {
       const content = message.content;
       if (Array.isArray(content)) {
         for (const block of content) {
-          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
           if (typeof block !== "object" || block === null) continue;
           const b = block as ContentBlock;
           if (b.type === "text" && typeof b.text === "string") chars += b.text.length;

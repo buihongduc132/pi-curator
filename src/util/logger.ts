@@ -172,7 +172,6 @@ export function createCuratorLogger(opts: CreateCuratorLoggerOpts): CuratorLogge
   const baseScope = opts.scope;
 
   function emit(lvl: Level, msg: string, attrs?: Record<string, unknown>): void {
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     if (!enabled) return;
     // level gate against the resolved level
     if (LEVEL_RANK[lvl] < LEVEL_RANK[level]) return;

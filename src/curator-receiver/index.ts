@@ -58,7 +58,6 @@ export default function curatorReceiverExtension(
       const ctxAdapter: ReceiverCtx = {
         sessionId: ctx?.sessionId ?? ctx?.session?.id,
         sessionManager: ctx?.sessionManager,
-        // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
         sendMessage: typeof ctx?.sendMessage === "function" ? ctx.sendMessage : undefined,
         ui: {
           notify:

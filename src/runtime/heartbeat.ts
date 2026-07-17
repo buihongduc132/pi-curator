@@ -112,13 +112,11 @@ const PHASE_RANK: Record<CuratorPhase, number> = {
  * after `signaling` is a no-op, not a regression.
  */
 export function nextPhase(current: CuratorPhase, event: PhaseEvent): CuratorPhase {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (current === "done") return "done";
   switch (event) {
     case "start_review":
       return current === "spawned" ? "scanning" : current;
     case "signal":
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       return current === "scanning" || current === "signaling" || current === "spawned"
         ? "signaling"
         : current;
@@ -261,7 +259,6 @@ export function startHeartbeat(opts: StartHeartbeatOpts): HeartbeatController {
       opts.onError?.(new Error(`heartbeat writer returned ${res}; stopping loop`));
       stopped = true;
       if (handle !== undefined) scheduler.clearInterval(handle);
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       return false;
     } catch (err) {
       // REQ-CR: swallow — single failed write MUST NOT crash the curator.
@@ -275,7 +272,6 @@ export function startHeartbeat(opts: StartHeartbeatOpts): HeartbeatController {
   // First tick fires immediately and transitions spawned → scanning.
   // (Fire-and-forget; runTick swallows all errors.)
   void runTick(firstTick ? "start_review" : undefined).then(() => {
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     firstTick = false;
   });
 
@@ -321,7 +317,6 @@ export function createBeforeExitHandler(
     } catch (err) {
       // REQ-CR: swallow — NEVER re-throw from beforeExit.
       try {
-        // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
         onError?.(err);
       } catch {
         // swallow the swallow-logger failure too.

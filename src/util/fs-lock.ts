@@ -51,7 +51,6 @@ export async function atomicWriteJson(filePath: string, data: unknown): Promise<
  */
 export function atomicWriteJsonSync(filePath: string, data: unknown): void {
   const dir = filePath.slice(0, Math.max(filePath.lastIndexOf("/"), 0));
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (dir) {
     try {
       fs.mkdirSync(dir, { recursive: true });
@@ -84,7 +83,6 @@ export function isPidAlive(
     return true;
   } catch (err: unknown) {
     if (isErrnoException(err) && err.code === "ESRCH") return false;
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     if (isErrnoException(err) && err.code === "EPERM") return true;
     return true; // conservative: assume alive on unknown errors
   }
@@ -114,14 +112,11 @@ function readLockMetadata(lockFilePath: string): LockMetadata | null {
   try {
     const raw = fs.readFileSync(lockFilePath, "utf8");
     const parsed: unknown = JSON.parse(raw);
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     if (typeof parsed !== "object" || parsed === null) return null;
     const p = parsed as Record<string, unknown>;
     return {
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       pid: typeof p.pid === "number" ? p.pid : undefined,
       hostname: typeof p.hostname === "string" ? p.hostname : undefined,
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       createdAt: typeof p.createdAt === "string" ? p.createdAt : undefined,
       label: typeof p.label === "string" ? p.label : undefined,
     };
@@ -229,7 +224,6 @@ export async function withLock<T>(
     return await fn();
   } finally {
     try {
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       if (fd !== null) fs.closeSync(fd);
     } catch {
       /* ignore */

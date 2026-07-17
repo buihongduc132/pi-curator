@@ -123,7 +123,6 @@ export function resolveIntercomExtensionPath(here: string = _moduleDir): string 
     const jsCandidate = path.join(dir, ...siblingRelJs);
     if (fs.existsSync(jsCandidate)) return jsCandidate;
     const parent = path.dirname(dir);
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     if (parent === dir) break; // reached filesystem root.
     dir = parent;
   }
@@ -147,7 +146,6 @@ type AnyCtx = any;
 
 function safeNotify(ctx: AnyCtx, message: string, kind: string = "info"): void {
   try {
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     ctx?.ui?.notify?.(message, kind);
   } catch {
     // swallow — best-effort UI
@@ -156,7 +154,6 @@ function safeNotify(ctx: AnyCtx, message: string, kind: string = "info"): void {
 
 function safeSetStatus(ctx: AnyCtx, status: string): void {
   try {
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     ctx?.ui?.setStatus?.(status);
   } catch {
     // swallow
@@ -168,7 +165,6 @@ function safeSetStatus(ctx: AnyCtx, status: string): void {
  * (missing/unreadable file) so the spawn never blocks on a goal read.
  */
 function readGoalContents(goalFile: string | undefined): string {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (!goalFile) return "";
   try {
     return fs.readFileSync(goalFile, "utf8");
@@ -195,14 +191,12 @@ export function buildChildEnv(
   const env: NodeJS.ProcessEnv = { ...parentEnv };
   env.PI_CURATOR_ALIAS = personaAlias;
   env.PI_CURATOR_MAIN_ID = mainSessionId;
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   env.PI_CURATOR_MAIN_NAME = mainSessionName && mainSessionName.length > 0 ? mainSessionName : mainSessionId;
   env.PI_CURATOR_SPAWNED_AT = new Date(nowMs).toISOString();
   // Propagate the per-spawn OTel trace.id so the curator child's runtime logger
   // shares the same trace as the main-side spawn records (design: distributed
   // trace across main→runtime→signal→done). crypto.randomUUID is always
   // available in the supported Node runtimes.
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (traceId && traceId.length > 0) {
     env.PI_CURATOR_TRACE_ID = traceId;
   }
@@ -218,7 +212,6 @@ export function buildChildEnv(
  * signal_main → beforeExit done) shares one trace across two processes.
  */
 export function mintTraceId(): string {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   return randomUUID().replaceAll("-", "").padEnd(32, "0").slice(0, 32);
 }
 
@@ -426,7 +419,6 @@ export async function handleTurnEnd(
     const forkPath = writeForkFile(sessionJsonl, persona, forksDir);
     if (!forkPath) {
       safeNotify(ctx, `curator: fork filter failed for ${persona.alias} (skipped)`, "error");
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       log.warn("fork filter produced no output", { "persona.alias": persona.alias });
       continue;
     }
@@ -470,7 +462,6 @@ export async function handleTurnEnd(
     // Mint a per-spawn OTel trace.id so the curator child shares one trace with
     // the main-side spawn records (design: distributed trace across processes).
     const traceId = mintTraceId();
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     const pLog = log.child(persona.alias, { "persona.alias": persona.alias, "trace.id": traceId });
     pLog.info("trace started", { traceId });
 
@@ -566,7 +557,6 @@ export async function handleTurnEnd(
   // 3. Staleness summary via UI (REQ-LC-06, UI-only).
   try {
     const sessionPidsDir = path.join(pidRoot, mainSessionId);
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     const entries = await readPidEntries(sessionPidsDir, { checkPid: true });
     const summary = summarizeLiveness(entries);
     safeSetStatus(ctx, formatLivenessStatus(summary));
