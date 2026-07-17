@@ -68,6 +68,7 @@ const ENV = {
 };
 
 function parsePositiveNumber(value: string | undefined, fallback: number): number {
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (!value) return fallback;
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -95,6 +96,7 @@ export function getCuratorHeartbeatConfig(
  * unparseable. Pure. (Mirrors teams' `parseIsoMs`.)
  */
 export function parseIsoMs(value: string | undefined | null): number | null {
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (!value) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;

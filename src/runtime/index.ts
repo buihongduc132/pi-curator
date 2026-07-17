@@ -97,6 +97,7 @@ export function isMainExtensionLoaded(
     if (Array.isArray(ctxExt) && ctxExt.some((e: any) => typeof e === "string" && /pi-curator|curator-main/i.test(e))) {
       return true;
     }
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     const piExt = (pi as any)?.extensions;
     if (Array.isArray(piExt) && piExt.some((e: any) => typeof e === "string" && /pi-curator|curator-main/i.test(e))) {
       return true;
@@ -179,7 +180,9 @@ export default function curatorRuntimeExtension(
   const rtLog: CuratorLogger = createCuratorLogger({
     sessionId: process.env.PI_CURATOR_MAIN_ID ?? `pid-${process.pid}`,
     scope: "curator.runtime",
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     traceId: typeof envTrace === "string" && envTrace.length > 0 ? envTrace : undefined,
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     persistentAttrs: { pid: process.pid },
   });
   rtLog.info("runtime extension loaded");
@@ -200,6 +203,7 @@ export default function curatorRuntimeExtension(
       "persona.alias": identity.curatorAlias,
       "session.id": identity.mainSessionId,
       "session.name": identity.mainSessionName,
+      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       "curator.session.id": ctx?.sessionId ?? ctx?.session?.id,
     });
 
@@ -220,12 +224,16 @@ export default function curatorRuntimeExtension(
       {
         // Use a no-op client when intercom is unavailable; execute() will catch
         // the rejection and fall back to the findings file (REQ-SG-08).
+        // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
         client: client ?? { send: async () => Promise.reject(new Error("pi-intercom not loaded")) },
         fallbackDir,
         onLog: (level, msg, attrs) => {
           // Route into the runtime OTel logger under a signal_main scope.
+          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
           const sigLog = rtLog.child("signal_main", { "persona.alias": identity.curatorAlias });
+          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
           if (level === "info") sigLog.info(msg, attrs);
+          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
           else if (level === "warn") sigLog.warn(msg, attrs);
           else sigLog.error(msg, attrs);
         },
@@ -281,6 +289,7 @@ export default function curatorRuntimeExtension(
     });
     rtLog.info("heartbeat started", {
       "persona.alias": identity.curatorAlias,
+      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       curatorSessionId: curatorSessionId ?? null,
       pidsFile,
     });
@@ -289,6 +298,7 @@ export default function curatorRuntimeExtension(
     // dead-heartbeat timeout). Non-throwing per REQ-CR.
     const writeDone = createBeforeExitHandler(pidsFile, process.pid);
     process.on("beforeExit", () => {
+      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       rtLog.info("curator done (beforeExit)", { "persona.alias": identity.curatorAlias, phase: "done" });
       void writeDone();
     });

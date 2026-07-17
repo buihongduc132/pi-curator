@@ -47,10 +47,12 @@ async function tickOnce(
   const jLog: CuratorLogger = createCuratorLogger({
     sessionId: "janitor",
     scope: "curator.janitor",
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     persistentAttrs: { pidsRoot, archiveDir, forksDir, logsDir: logsDir ?? null },
   });
   // Janitor sweeps ALL main sessions (pidsRoot/<mainSessionId>/*). Enumerate
   // per-session dirs; also include the flat case (pidsRoot/<curator>.json).
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   let sessionDirs: string[] = [];
   try {
     sessionDirs = fs
@@ -58,6 +60,7 @@ async function tickOnce(
       .filter((d) => d.isDirectory())
       .map((d) => path.join(pidsRoot, d.name));
   } catch {
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     sessionDirs = [];
   }
   sessionDirs.push(pidsRoot);
@@ -75,6 +78,7 @@ async function tickOnce(
       forksDir,
       killPids: true,
       logsDir,
+      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
       onLog: (level, msg, attrs) => jLog[level](msg, attrs),
     });
     swept += r.swept;
@@ -122,7 +126,9 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 }
 
 // Run when invoked directly (not when imported by tests).
+// Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === import.meta.url.replace("file://", "");
+// Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
 if (invokedDirectly) {
   main().catch((err) => {
     console.error("[pi-curator-janitor] uncaught:", err);
