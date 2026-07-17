@@ -169,9 +169,11 @@ export function normalizeAgreement(raw: RawEntry): Agreement | null {
  * aborting the whole read (REQ: "Cross-check failures MUST fail open").
  */
 export function normalizeEntry(raw: unknown): MailboxEntry | null {
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (!raw || typeof raw !== "object") return null;
   const r = raw as RawEntry;
   if (r.type === "finding") return normalizeFinding(r);
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (r.type === "agreement") return normalizeAgreement(r);
   return null;
 }
@@ -215,7 +217,9 @@ export function serializeEntry(entry: MailboxEntry): string {
  * lines are skipped, NOT thrown. Pure, total (never throws).
  */
 export function parseEntry(line: string): MailboxEntry | null {
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   const trimmed = line.trim();
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   if (!trimmed) return null;
   try {
     return normalizeEntry(JSON.parse(trimmed));

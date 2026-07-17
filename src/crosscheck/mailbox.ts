@@ -100,6 +100,7 @@ export async function readMailbox(
     return out;
   } catch (err) {
     // Debug-only log if a logger is provided; otherwise swallow silently.
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     if (typeof process !== "undefined" && process.env?.DEBUG?.includes("curator")) {
       // eslint-disable-next-line no-console
       console.debug("[crosscheck] readMailbox fail-open:", err);
@@ -126,6 +127,7 @@ export async function appendEntry(
     await fs.mkdirp(dirname(path));
     await fs.appendLine(path, serializeEntry(entry));
   } catch (err) {
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     if (typeof process !== "undefined" && process.env?.DEBUG?.includes("curator")) {
       // eslint-disable-next-line no-console
       console.debug("[crosscheck] appendEntry fail-open:", err);

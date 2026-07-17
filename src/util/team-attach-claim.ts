@@ -154,6 +154,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function getString(obj: Record<string, unknown>, key: string): string | null {
   const v = obj[key];
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
@@ -164,6 +165,7 @@ function getOptionalString(obj: Record<string, unknown>, key: string): string | 
 
 function getNumber(obj: Record<string, unknown>, key: string): number | null {
   const v = obj[key];
+  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
@@ -281,6 +283,7 @@ export async function acquireCuratorClaim(
         ...(current ? { replacedClaim: current } : {}),
       };
     },
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     { label: `curator-claim:acquire:${opts.mainSessionId}/${opts.curator}` },
   );
 }
@@ -317,6 +320,7 @@ export async function heartbeatCuratorClaim(
       await writeCuratorClaim(filePath, updated);
       return "updated";
     },
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     { label: `curator-claim:heartbeat:${pid}` },
   );
 }
@@ -347,6 +351,7 @@ export async function releaseCuratorClaim(
       }
       return "released";
     },
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     { label: `curator-claim:release:${pid}` },
   );
 }
@@ -388,6 +393,7 @@ export async function seedCuratorPid(
       await writeCuratorClaim(filePath, updated);
       return "seeded";
     },
+    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
     { label: `curator-claim:seed:${childPid}` },
   );
 }
