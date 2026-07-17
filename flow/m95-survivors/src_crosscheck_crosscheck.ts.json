@@ -1,0 +1,263 @@
+[
+  {
+    "id": "11",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 11,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33"
+    ],
+    "location": {
+      "end": {
+        "column": 38,
+        "line": 78
+      },
+      "start": {
+        "column": 7,
+        "line": 78
+      }
+    }
+  },
+  {
+    "id": "21",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 11,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33"
+    ],
+    "location": {
+      "end": {
+        "column": 44,
+        "line": 82
+      },
+      "start": {
+        "column": 7,
+        "line": 82
+      }
+    }
+  },
+  {
+    "id": "31",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 11,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33"
+    ],
+    "location": {
+      "end": {
+        "column": 44,
+        "line": 86
+      },
+      "start": {
+        "column": 7,
+        "line": 86
+      }
+    }
+  },
+  {
+    "id": "37",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 23,
+    "coveredBy": [
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "26",
+      "27",
+      "34",
+      "35",
+      "36",
+      "37",
+      "38",
+      "43"
+    ],
+    "location": {
+      "end": {
+        "column": 25,
+        "line": 132
+      },
+      "start": {
+        "column": 7,
+        "line": 132
+      }
+    }
+  },
+  {
+    "id": "60",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 17,
+    "coveredBy": [
+      "6",
+      "7",
+      "9",
+      "10",
+      "11",
+      "13",
+      "19",
+      "20",
+      "21",
+      "24",
+      "26",
+      "27",
+      "34",
+      "35",
+      "37",
+      "38",
+      "43"
+    ],
+    "location": {
+      "end": {
+        "column": 26,
+        "line": 163
+      },
+      "start": {
+        "column": 9,
+        "line": 163
+      }
+    }
+  },
+  {
+    "id": "72",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 10,
+    "coveredBy": [
+      "15",
+      "16",
+      "21",
+      "22",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "39"
+    ],
+    "location": {
+      "end": {
+        "column": 79,
+        "line": 180
+      },
+      "start": {
+        "column": 56,
+        "line": 180
+      }
+    }
+  },
+  {
+    "id": "81",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 7,
+    "coveredBy": [
+      "15",
+      "19",
+      "20",
+      "26",
+      "40",
+      "42",
+      "43"
+    ],
+    "location": {
+      "end": {
+        "column": 79,
+        "line": 199
+      },
+      "start": {
+        "column": 56,
+        "line": 199
+      }
+    }
+  },
+  {
+    "id": "100",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 11,
+    "coveredBy": [
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "26",
+      "27",
+      "28",
+      "43"
+    ],
+    "location": {
+      "end": {
+        "column": 41,
+        "line": 235
+      },
+      "start": {
+        "column": 7,
+        "line": 235
+      }
+    }
+  }
+]

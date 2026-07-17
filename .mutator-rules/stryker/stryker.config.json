@@ -29,13 +29,12 @@
       "Regex"
     ]
   },
-  "coverageAnalysis": "perTest",
+  "coverageAnalysis": "off",
   "timeoutMS": 90000,
   "timeoutFactor": 1.5,
   "disableBail": false,
   "cleanTempDir": true,
-  "incremental": true,
-  "incrementalFile": "reports/mutation/stryker-incremental.json",
+  "incremental": false,
   "reporters": [
     "progress",
     "clear-text",
@@ -51,5 +50,5 @@
     "configFile": ".mutator-rules/stryker/vitest.mutation.config.ts",
     "dir": "."
   },
-  "concurrency": 2
+  "concurrency": 4
 }

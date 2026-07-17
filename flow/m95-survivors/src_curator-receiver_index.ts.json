@@ -1,0 +1,105 @@
+[
+  {
+    "id": "16",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 14,
+    "coveredBy": [
+      "76",
+      "77",
+      "78",
+      "79",
+      "80",
+      "81",
+      "82",
+      "83",
+      "84",
+      "85",
+      "86",
+      "87",
+      "88",
+      "89"
+    ],
+    "location": {
+      "end": {
+        "column": 60,
+        "line": 61
+      },
+      "start": {
+        "column": 22,
+        "line": 61
+      }
+    }
+  },
+  {
+    "id": "31",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui?.notify(`curator-receiver: handler crashed: ${err instanceof Error ? err.message : String(err)}`, \"error\")",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 3,
+    "coveredBy": [
+      "86",
+      "87",
+      "88"
+    ],
+    "location": {
+      "end": {
+        "column": 10,
+        "line": 83
+      },
+      "start": {
+        "column": 9,
+        "line": 78
+      }
+    }
+  },
+  {
+    "id": "32",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui.notify",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 3,
+    "coveredBy": [
+      "86",
+      "87",
+      "88"
+    ],
+    "location": {
+      "end": {
+        "column": 24,
+        "line": 78
+      },
+      "start": {
+        "column": 9,
+        "line": 78
+      }
+    }
+  },
+  {
+    "id": "33",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx.ui",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 3,
+    "coveredBy": [
+      "86",
+      "87",
+      "88"
+    ],
+    "location": {
+      "end": {
+        "column": 16,
+        "line": 78
+      },
+      "start": {
+        "column": 9,
+        "line": 78
+      }
+    }
+  }
+]

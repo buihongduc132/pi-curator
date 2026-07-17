@@ -1,0 +1,1038 @@
+[
+  {
+    "id": "28",
+    "mutatorName": "OptionalChaining",
+    "replacement": "(pi as any).extensions",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 12,
+    "coveredBy": [
+      "6",
+      "9",
+      "12",
+      "13",
+      "14",
+      "15",
+      "35",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41"
+    ],
+    "location": {
+      "end": {
+        "column": 42,
+        "line": 100
+      },
+      "start": {
+        "column": 19,
+        "line": 100
+      }
+    }
+  },
+  {
+    "id": "88",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 37,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 65,
+        "line": 182
+      },
+      "start": {
+        "column": 14,
+        "line": 182
+      }
+    }
+  },
+  {
+    "id": "87",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 37,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 65,
+        "line": 182
+      },
+      "start": {
+        "column": 14,
+        "line": 182
+      }
+    }
+  },
+  {
+    "id": "96",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 37,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "30",
+      "31",
+      "32",
+      "33",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "52",
+      "53",
+      "54",
+      "55",
+      "56",
+      "57",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 42,
+        "line": 183
+      },
+      "start": {
+        "column": 22,
+        "line": 183
+      }
+    }
+  },
+  {
+    "id": "104",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui?.notify(\"curator-runtime: identity env not set \u2014 signal_main tool not registered\", \"info\")",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "4",
+      "30",
+      "52",
+      "53",
+      "54"
+    ],
+    "location": {
+      "end": {
+        "column": 8,
+        "line": 196
+      },
+      "start": {
+        "column": 7,
+        "line": 193
+      }
+    }
+  },
+  {
+    "id": "105",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui.notify",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "4",
+      "30",
+      "52",
+      "53",
+      "54"
+    ],
+    "location": {
+      "end": {
+        "column": 22,
+        "line": 193
+      },
+      "start": {
+        "column": 7,
+        "line": 193
+      }
+    }
+  },
+  {
+    "id": "106",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx.ui",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "4",
+      "30",
+      "52",
+      "53",
+      "54"
+    ],
+    "location": {
+      "end": {
+        "column": 14,
+        "line": 193
+      },
+      "start": {
+        "column": 7,
+        "line": 193
+      }
+    }
+  },
+  {
+    "id": "110",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 32,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "31",
+      "32",
+      "33",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 6,
+        "line": 204
+      },
+      "start": {
+        "column": 35,
+        "line": 199
+      }
+    }
+  },
+  {
+    "id": "111",
+    "mutatorName": "LogicalOperator",
+    "replacement": "ctx?.sessionId && ctx?.session?.id",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 32,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "31",
+      "32",
+      "33",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 63,
+        "line": 203
+      },
+      "start": {
+        "column": 29,
+        "line": 203
+      }
+    }
+  },
+  {
+    "id": "130",
+    "mutatorName": "BlockStatement",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "34",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 10,
+        "line": 231
+      },
+      "start": {
+        "column": 39,
+        "line": 225
+      }
+    }
+  },
+  {
+    "id": "127",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 30,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "29",
+      "31",
+      "32",
+      "33",
+      "34",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 100,
+        "line": 223
+      },
+      "start": {
+        "column": 27,
+        "line": 223
+      }
+    }
+  },
+  {
+    "id": "132",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "34",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 95,
+        "line": 227
+      },
+      "start": {
+        "column": 53,
+        "line": 227
+      }
+    }
+  },
+  {
+    "id": "133",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "34",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 31,
+        "line": 228
+      },
+      "start": {
+        "column": 15,
+        "line": 228
+      }
+    }
+  },
+  {
+    "id": "134",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "34",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 31,
+        "line": 228
+      },
+      "start": {
+        "column": 15,
+        "line": 228
+      }
+    }
+  },
+  {
+    "id": "135",
+    "mutatorName": "EqualityOperator",
+    "replacement": "level !== \"info\"",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 2,
+    "coveredBy": [
+      "34",
+      "42"
+    ],
+    "location": {
+      "end": {
+        "column": 31,
+        "line": 228
+      },
+      "start": {
+        "column": 15,
+        "line": 228
+      }
+    }
+  },
+  {
+    "id": "137",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 1,
+    "coveredBy": [
+      "34"
+    ],
+    "location": {
+      "end": {
+        "column": 36,
+        "line": 229
+      },
+      "start": {
+        "column": 20,
+        "line": 229
+      }
+    }
+  },
+  {
+    "id": "138",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 1,
+    "coveredBy": [
+      "34"
+    ],
+    "location": {
+      "end": {
+        "column": 36,
+        "line": 229
+      },
+      "start": {
+        "column": 20,
+        "line": 229
+      }
+    }
+  },
+  {
+    "id": "139",
+    "mutatorName": "EqualityOperator",
+    "replacement": "level !== \"warn\"",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 1,
+    "coveredBy": [
+      "34"
+    ],
+    "location": {
+      "end": {
+        "column": 36,
+        "line": 229
+      },
+      "start": {
+        "column": 20,
+        "line": 229
+      }
+    }
+  },
+  {
+    "id": "143",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 29,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "31",
+      "32",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57"
+    ],
+    "location": {
+      "end": {
+        "column": 6,
+        "line": 242
+      },
+      "start": {
+        "column": 42,
+        "line": 239
+      }
+    }
+  },
+  {
+    "id": "156",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 4,
+    "coveredBy": [
+      "26",
+      "47",
+      "48",
+      "49"
+    ],
+    "location": {
+      "end": {
+        "column": 10,
+        "line": 273
+      },
+      "start": {
+        "column": 46,
+        "line": 270
+      }
+    }
+  },
+  {
+    "id": "163",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 29,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "31",
+      "32",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57"
+    ],
+    "location": {
+      "end": {
+        "column": 6,
+        "line": 286
+      },
+      "start": {
+        "column": 37,
+        "line": 282
+      }
+    }
+  },
+  {
+    "id": "164",
+    "mutatorName": "LogicalOperator",
+    "replacement": "curatorSessionId && null",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 29,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "31",
+      "32",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57"
+    ],
+    "location": {
+      "end": {
+        "column": 49,
+        "line": 284
+      },
+      "start": {
+        "column": 25,
+        "line": 284
+      }
+    }
+  },
+  {
+    "id": "168",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 1,
+    "coveredBy": [
+      "27"
+    ],
+    "location": {
+      "end": {
+        "column": 104,
+        "line": 292
+      },
+      "start": {
+        "column": 47,
+        "line": 292
+      }
+    }
+  },
+  {
+    "id": "170",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui?.notify(`curator-runtime: heartbeat started (pid ${process.pid}${curatorSessionId ? `, session ${curatorSessionId}` : \"\"})`, \"info\")",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 29,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "31",
+      "32",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57"
+    ],
+    "location": {
+      "end": {
+        "column": 6,
+        "line": 300
+      },
+      "start": {
+        "column": 5,
+        "line": 295
+      }
+    }
+  },
+  {
+    "id": "171",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui.notify",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 29,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "31",
+      "32",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57"
+    ],
+    "location": {
+      "end": {
+        "column": 20,
+        "line": 295
+      },
+      "start": {
+        "column": 5,
+        "line": 295
+      }
+    }
+  },
+  {
+    "id": "172",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx.ui",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 29,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "5",
+      "6",
+      "23",
+      "24",
+      "25",
+      "26",
+      "27",
+      "28",
+      "29",
+      "31",
+      "32",
+      "34",
+      "42",
+      "43",
+      "44",
+      "45",
+      "46",
+      "47",
+      "48",
+      "49",
+      "50",
+      "51",
+      "55",
+      "56",
+      "57"
+    ],
+    "location": {
+      "end": {
+        "column": 12,
+        "line": 295
+      },
+      "start": {
+        "column": 5,
+        "line": 295
+      }
+    }
+  },
+  {
+    "id": "179",
+    "mutatorName": "ObjectLiteral",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 3,
+    "coveredBy": [
+      "33",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 6,
+        "line": 306
+      },
+      "start": {
+        "column": 41,
+        "line": 304
+      }
+    }
+  },
+  {
+    "id": "181",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui?.notify(`curator-runtime: setup failed: ${err instanceof Error ? err.message : String(err)}`, \"error\")",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 3,
+    "coveredBy": [
+      "33",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 8,
+        "line": 311
+      },
+      "start": {
+        "column": 7,
+        "line": 308
+      }
+    }
+  },
+  {
+    "id": "182",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx?.ui.notify",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 3,
+    "coveredBy": [
+      "33",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 22,
+        "line": 308
+      },
+      "start": {
+        "column": 7,
+        "line": 308
+      }
+    }
+  },
+  {
+    "id": "183",
+    "mutatorName": "OptionalChaining",
+    "replacement": "ctx.ui",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 3,
+    "coveredBy": [
+      "33",
+      "58",
+      "59"
+    ],
+    "location": {
+      "end": {
+        "column": 14,
+        "line": 308
+      },
+      "start": {
+        "column": 7,
+        "line": 308
+      }
+    }
+  }
+]

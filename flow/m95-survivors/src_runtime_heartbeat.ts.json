@@ -1,0 +1,207 @@
+[
+  {
+    "id": "3",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 37,
+    "coveredBy": [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11",
+      "12",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "30",
+      "31",
+      "32",
+      "33",
+      "34",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44"
+    ],
+    "location": {
+      "end": {
+        "column": 25,
+        "line": 115
+      },
+      "start": {
+        "column": 7,
+        "line": 115
+      }
+    }
+  },
+  {
+    "id": "24",
+    "mutatorName": "ConditionalExpression",
+    "replacement": "false",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 3,
+    "coveredBy": [
+      "3",
+      "5",
+      "33"
+    ],
+    "location": {
+      "end": {
+        "column": 63,
+        "line": 120
+      },
+      "start": {
+        "column": 40,
+        "line": 120
+      }
+    }
+  },
+  {
+    "id": "84",
+    "mutatorName": "BooleanLiteral",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 4,
+    "coveredBy": [
+      "24",
+      "38",
+      "39",
+      "44"
+    ],
+    "location": {
+      "end": {
+        "column": 19,
+        "line": 262
+      },
+      "start": {
+        "column": 14,
+        "line": 262
+      }
+    }
+  },
+  {
+    "id": "91",
+    "mutatorName": "BlockStatement",
+    "replacement": "{}",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 18,
+    "coveredBy": [
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "31",
+      "32",
+      "34",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44"
+    ],
+    "location": {
+      "end": {
+        "column": 4,
+        "line": 276
+      },
+      "start": {
+        "column": 67,
+        "line": 274
+      }
+    }
+  },
+  {
+    "id": "92",
+    "mutatorName": "BooleanLiteral",
+    "replacement": "true",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 18,
+    "coveredBy": [
+      "20",
+      "21",
+      "22",
+      "23",
+      "24",
+      "31",
+      "32",
+      "34",
+      "35",
+      "36",
+      "37",
+      "38",
+      "39",
+      "40",
+      "41",
+      "42",
+      "43",
+      "44"
+    ],
+    "location": {
+      "end": {
+        "column": 22,
+        "line": 275
+      },
+      "start": {
+        "column": 17,
+        "line": 275
+      }
+    }
+  },
+  {
+    "id": "111",
+    "mutatorName": "OptionalChaining",
+    "replacement": "onError(err)",
+    "status": "Survived",
+    "static": false,
+    "testsCompleted": 5,
+    "coveredBy": [
+      "26",
+      "27",
+      "45",
+      "46",
+      "47"
+    ],
+    "location": {
+      "end": {
+        "column": 23,
+        "line": 320
+      },
+      "start": {
+        "column": 9,
+        "line": 320
+      }
+    }
+  }
+]
