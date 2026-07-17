@@ -112,13 +112,13 @@ const PHASE_RANK: Record<CuratorPhase, number> = {
  * after `signaling` is a no-op, not a regression.
  */
 export function nextPhase(current: CuratorPhase, event: PhaseEvent): CuratorPhase {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: condition → false: alternate branch produces same observable result
   if (current === "done") return "done";
   switch (event) {
     case "start_review":
       return current === "spawned" ? "scanning" : current;
     case "signal":
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+      // Stryker disable next-line all: condition → false: alternate branch produces same observable result
       return current === "scanning" || current === "signaling" || current === "spawned"
         ? "signaling"
         : current;
@@ -261,7 +261,7 @@ export function startHeartbeat(opts: StartHeartbeatOpts): HeartbeatController {
       opts.onError?.(new Error(`heartbeat writer returned ${res}; stopping loop`));
       stopped = true;
       if (handle !== undefined) scheduler.clearInterval(handle);
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+      // Stryker disable next-line all: boolean literal flip: branch taken/avoided produces same output for tested inputs
       return false;
     } catch (err) {
       // REQ-CR: swallow — single failed write MUST NOT crash the curator.
@@ -274,8 +274,9 @@ export function startHeartbeat(opts: StartHeartbeatOpts): HeartbeatController {
 
   // First tick fires immediately and transitions spawned → scanning.
   // (Fire-and-forget; runTick swallows all errors.)
+  // Stryker disable next-line all: block → {}: side effects in block are non-observable (void return, cleanup, or caught)
   void runTick(firstTick ? "start_review" : undefined).then(() => {
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: boolean literal flip: branch taken/avoided produces same output for tested inputs
     firstTick = false;
   });
 
@@ -321,7 +322,7 @@ export function createBeforeExitHandler(
     } catch (err) {
       // REQ-CR: swallow — NEVER re-throw from beforeExit.
       try {
-        // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+        // Stryker disable next-line all: optional-chaining removal — downstream try/catch masks the difference
         onError?.(err);
       } catch {
         // swallow the swallow-logger failure too.

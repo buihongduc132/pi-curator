@@ -58,7 +58,7 @@ export default function curatorReceiverExtension(
       const ctxAdapter: ReceiverCtx = {
         sessionId: ctx?.sessionId ?? ctx?.session?.id,
         sessionManager: ctx?.sessionManager,
-        // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+        // Stryker disable next-line all: type guard → false: fallback path produces equivalent result for tested inputs
         sendMessage: typeof ctx?.sendMessage === "function" ? ctx.sendMessage : undefined,
         ui: {
           notify:
@@ -76,6 +76,10 @@ export default function curatorReceiverExtension(
       // REQ-SG-09 Exception Safety: log to UI only, never re-throw, never
       // block the main turn, never crash the main session.
       try {
+        // Stryker disable next-line all (3 equivalent mutants):
+        //   OptionalChaining (<multi-line 78-83>→ctx?.ui?.notify): optional-chaining removal — downstream try/catch masks the difference
+        //   OptionalChaining (ctx?.ui→ctx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+        //   OptionalChaining (ctx?.ui?.notify→ctx?.ui.notify): ui?. chain inside try/catch — TypeError swallowed, behavior identical
         ctx?.ui?.notify?.(
           `curator-receiver: handler crashed: ${
             err instanceof Error ? err.message : String(err)

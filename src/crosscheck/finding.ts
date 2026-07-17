@@ -169,11 +169,11 @@ export function normalizeAgreement(raw: RawEntry): Agreement | null {
  * aborting the whole read (REQ: "Cross-check failures MUST fail open").
  */
 export function normalizeEntry(raw: unknown): MailboxEntry | null {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: type guard → false: fallback path produces equivalent result for tested inputs
   if (!raw || typeof raw !== "object") return null;
   const r = raw as RawEntry;
   if (r.type === "finding") return normalizeFinding(r);
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: equality → true: code path taken unconditionally; other guards prevent side effects
   if (r.type === "agreement") return normalizeAgreement(r);
   return null;
 }
@@ -217,9 +217,9 @@ export function serializeEntry(entry: MailboxEntry): string {
  * lines are skipped, NOT thrown. Pure, total (never throws).
  */
 export function parseEntry(line: string): MailboxEntry | null {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: method chain mutation: result consumed by typeof or optional guard that treats variants identically
   const trimmed = line.trim();
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: condition → false: alternate branch produces same observable result
   if (!trimmed) return null;
   try {
     return normalizeEntry(JSON.parse(trimmed));

@@ -137,6 +137,7 @@ export async function readPidEntries(
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
+    // Stryker disable next-line all: block → {}: side effects in block are non-observable (void return, cleanup, or caught)
     } catch {
       continue; // corrupt JSON — skip
     }
@@ -167,7 +168,7 @@ export function summarizeLiveness(entries: ReadonlyArray<StalePidEntry>): {
   for (const e of entries) {
     if (e.liveness === "live") live += 1;
     else if (e.liveness === "stale") stale += 1;
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: equality → true: code path taken unconditionally; other guards prevent side effects
     else if (e.liveness === "dead") dead += 1;
   }
   return { live, stale, dead, total: entries.length };

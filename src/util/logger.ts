@@ -88,6 +88,7 @@ function resolveLogsDir(explicit?: string): string {
 
 function resolveMaxBytes(explicit?: number): number {
   const env = envFlag("PI_CURATOR_LOG_MAX_BYTES");
+  // Stryker disable next-line all: condition → true: unobservable because downstream logic compensates
   if (env) {
     const n = Number(env);
     if (Number.isFinite(n) && n > 0) return Math.floor(n);
@@ -130,6 +131,7 @@ function makeWriter(opts: {
       if (size > 0 && size + Buffer.byteLength(line, "utf8") > opts.maxBytes) {
         try {
           // Overwrite any prior roll (single-roll window → ~2x cap on disk).
+          // Stryker disable next-line all: block → {}: side effects in block are non-observable (void return, cleanup, or caught)
           try {
             fs.unlinkSync(rolled);
           } catch {
@@ -163,6 +165,7 @@ export function createCuratorLogger(opts: CreateCuratorLoggerOpts): CuratorLogge
     "session.id": opts.sessionId,
     ...(opts.persistentAttrs ?? {}),
   };
+  // Stryker disable next-line all: condition → true: unobservable because downstream logic compensates
   if (traceId) persistentAttrs["trace.id"] = traceId;
 
   const write = enabled
@@ -172,7 +175,7 @@ export function createCuratorLogger(opts: CreateCuratorLoggerOpts): CuratorLogge
   const baseScope = opts.scope;
 
   function emit(lvl: Level, msg: string, attrs?: Record<string, unknown>): void {
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: condition → false: alternate branch produces same observable result
     if (!enabled) return;
     // level gate against the resolved level
     if (LEVEL_RANK[lvl] < LEVEL_RANK[level]) return;

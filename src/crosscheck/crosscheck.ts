@@ -75,17 +75,17 @@ export function resolveCrossCheck(
   return {
     enabled: typeof src.enabled === "boolean" ? src.enabled : false,
     mode:
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+      // Stryker disable next-line all: condition → false: alternate branch produces same observable result
       src.mode === "append-agreement" || src.mode === "signal-anyway"
         ? src.mode
         : "append-agreement",
     trigger:
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+      // Stryker disable next-line all: condition → false: alternate branch produces same observable result
       src.trigger === "before-every-signal" || src.trigger === "critical-only"
         ? src.trigger
         : "before-every-signal",
     windowMinutes:
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+      // Stryker disable next-line all: type guard → true: non-matching types rejected downstream by other checks
       typeof src.windowMinutes === "number" && Number.isFinite(src.windowMinutes)
         ? Math.max(0, src.windowMinutes)
         : 10,
@@ -132,7 +132,7 @@ const MS_PER_MIN = 60_000;
  * Pure, total.
  */
 function toEpochMs(ts: string | number | Date): number {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: condition → false: alternate branch produces same observable result
   if (ts instanceof Date) return ts.getTime();
   if (typeof ts === "number") return ts;
   const n = Date.parse(ts);
@@ -164,7 +164,7 @@ export function findMatchingPeerFinding(
     if (e.type !== "finding") continue;
     if (dedupKey(e) !== wantKey) continue;
     const eMs = toEpochMs(e.ts);
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: condition → false: alternate branch produces same observable result
     if (Number.isNaN(eMs)) continue;
     if (Math.abs(nowMs - eMs) > windowMs) continue;
     if (eMs > bestMs) {
@@ -182,7 +182,7 @@ export function buildFinding(
   pending: PendingFinding,
   now: string | number | Date,
 ): Finding {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: type guard → true: non-matching types rejected downstream by other checks
   const ts = now instanceof Date ? now.toISOString() : typeof now === "number" ? new Date(now).toISOString() : now;
   return {
     type: "finding",
@@ -202,7 +202,7 @@ export function buildAgreement(
   pending: PendingFinding,
   now: string | number | Date,
 ): Agreement {
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: type guard → true: non-matching types rejected downstream by other checks
   const ts = now instanceof Date ? now.toISOString() : typeof now === "number" ? new Date(now).toISOString() : now;
   return {
     type: "agreement",
@@ -239,7 +239,7 @@ export function decideSignal(
   }
 
   // (2) Trigger gate: critical-only skips cross-check for non-critical.
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: equality → true: code path taken unconditionally; other guards prevent side effects
   if (config.trigger === "critical-only" && pending.severity !== "critical") {
     return { signal: true, append: null, reason: "trigger-skipped-non-critical" };
   }

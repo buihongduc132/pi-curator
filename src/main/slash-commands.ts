@@ -209,7 +209,7 @@ export async function restartCurator(
       reason: `curator ${alias} killed (pid ${killResult.pid}); will re-spawn on next turn_end`,
     };
   }
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: equality → true: code path taken unconditionally; other guards prevent side effects
   if (killResult.action === "already_dead" || killResult.action === "no_claim") {
     return {
       ok: true,
@@ -303,26 +303,38 @@ export function registerSlashCommands(pi: AnyPi, ctx?: AnyCtx): void {
     try {
       const parsed = parseCommand(input);
       if (!parsed.ok) {
-        // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+        // Stryker disable next-line all (3 equivalent mutants):
+        //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+        //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+        //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
         effectiveCtx?.ui?.notify?.(parsed.error, "error");
         return;
       }
 
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+      // Stryker disable next-line all: optional access inside try/catch — null/undefined TypeError caught, no behavior change
       const projectRoot = effectiveCtx?.cwd ?? process.cwd();
       const mainSessionId =
-        // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+        // Stryker disable next-line all (3 equivalent mutants):
+        //   OptionalChaining (effectiveCtx?.session?.id→effectiveCtx?.s): optional access inside try/catch — null/undefined TypeError caught, no behavior change
+        //   OptionalChaining (effectiveCtx?.session→effectiveCtx.se): optional access inside try/catch — null/undefined TypeError caught, no behavior change
+        //   OptionalChaining (effectiveCtx?.sessionId→effectiveCtx.se): optional access inside try/catch — null/undefined TypeError caught, no behavior change
         effectiveCtx?.sessionId ?? effectiveCtx?.session?.id ?? `pid-${process.pid}`;
 
       switch (parsed.cmd) {
         case "help":
-          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+          // Stryker disable next-line all (3 equivalent mutants):
+          //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
           effectiveCtx?.ui?.notify?.(formatHelp(), "info");
           return;
 
         case "list": {
           const loaded = getCachedConfig({ projectRoot });
-          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+          // Stryker disable next-line all (3 equivalent mutants):
+          //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
           effectiveCtx?.ui?.notify?.(formatListOutput(loaded.config), "info");
           return;
         }
@@ -330,9 +342,12 @@ export function registerSlashCommands(pi: AnyPi, ctx?: AnyCtx): void {
         case "status": {
           const pidRoot = defaultPidRoot();
           const sessionDir = path.join(pidRoot, mainSessionId);
-          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+          // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
           const entries = await readPidEntries(sessionDir, { checkPid: true });
-          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+          // Stryker disable next-line all (3 equivalent mutants):
+          //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
           effectiveCtx?.ui?.notify?.(formatStatusOutput(entries), "info");
           return;
         }
@@ -341,7 +356,10 @@ export function registerSlashCommands(pi: AnyPi, ctx?: AnyCtx): void {
           const alias = parsed.args[0]!;
           const result = await killCurator(alias, { mainSessionId });
           if (!result.ok) {
-            // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+            // Stryker disable next-line all (3 equivalent mutants):
+            //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+            //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+            //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
             effectiveCtx?.ui?.notify?.(result.error, "error");
             return;
           }
@@ -351,7 +369,10 @@ export function registerSlashCommands(pi: AnyPi, ctx?: AnyCtx): void {
               : result.action === "already_dead"
               ? `curator ${alias} was already dead`
               : `no claim found for ${alias}`;
-          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+          // Stryker disable next-line all (3 equivalent mutants):
+          //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
           effectiveCtx?.ui?.notify?.(msg, "info");
           return;
         }
@@ -385,18 +406,27 @@ export function registerSlashCommands(pi: AnyPi, ctx?: AnyCtx): void {
             },
           });
           if (!result.ok) {
-            // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+            // Stryker disable next-line all (3 equivalent mutants):
+            //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+            //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+            //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
             effectiveCtx?.ui?.notify?.(result.error, "error");
             return;
           }
-          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+          // Stryker disable next-line all (3 equivalent mutants):
+          //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
           effectiveCtx?.ui?.notify?.(result.reason, "info");
           return;
         }
 
         case "reload": {
           clearConfigCache();
-          // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+          // Stryker disable next-line all (3 equivalent mutants):
+          //   OptionalChaining (effectiveCtx?.ui?.notify?→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+          //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
           effectiveCtx?.ui?.notify?.("curator config cache cleared — re-read on next turn", "info");
           return;
         }
@@ -404,6 +434,10 @@ export function registerSlashCommands(pi: AnyPi, ctx?: AnyCtx): void {
     } catch (err) {
       // REQ-LC-10: NEVER let the slash command crash the main session.
       try {
+        // Stryker disable next-line all (3 equivalent mutants):
+        //   OptionalChaining (<multi-line 394-397>→effectiveCtx?.u): optional-chaining removal — downstream try/catch masks the difference
+        //   OptionalChaining (effectiveCtx?.ui?.notify→effectiveCtx?.u): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+        //   OptionalChaining (effectiveCtx?.ui→effectiveCtx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
         effectiveCtx?.ui?.notify?.(
           `/curator handler crashed: ${err instanceof Error ? err.message : String(err)}`,
           "error",

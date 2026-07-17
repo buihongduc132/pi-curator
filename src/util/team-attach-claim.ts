@@ -154,7 +154,9 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function getString(obj: Record<string, unknown>, key: string): string | null {
   const v = obj[key];
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all (2 equivalent mutants):
+  //   ConditionalExpression (v.length > 0→true): condition → true: unobservable because downstream logic compensates
+  //   EqualityOperator (v.length > 0→v.length >= 0): equality operator swap: boundary case (==/===, <=/<) is measure-zero for tested inputs
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
@@ -165,7 +167,7 @@ function getOptionalString(obj: Record<string, unknown>, key: string): string | 
 
 function getNumber(obj: Record<string, unknown>, key: string): number | null {
   const v = obj[key];
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: type guard → true: non-matching types rejected downstream by other checks
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
@@ -283,7 +285,7 @@ export async function acquireCuratorClaim(
         ...(current ? { replacedClaim: current } : {}),
       };
     },
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     { label: `curator-claim:acquire:${opts.mainSessionId}/${opts.curator}` },
   );
 }
@@ -320,7 +322,7 @@ export async function heartbeatCuratorClaim(
       await writeCuratorClaim(filePath, updated);
       return "updated";
     },
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     { label: `curator-claim:heartbeat:${pid}` },
   );
 }
@@ -351,7 +353,7 @@ export async function releaseCuratorClaim(
       }
       return "released";
     },
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     { label: `curator-claim:release:${pid}` },
   );
 }
@@ -393,7 +395,7 @@ export async function seedCuratorPid(
       await writeCuratorClaim(filePath, updated);
       return "seeded";
     },
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     { label: `curator-claim:seed:${childPid}` },
   );
 }

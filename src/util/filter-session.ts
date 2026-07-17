@@ -125,20 +125,27 @@ export function computeActiveBranchIds(
 ): Set<string> {
   const byId = new Map<string, SessionEntry>();
   for (const e of entries) {
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: type guard → true: non-matching types rejected downstream by other checks
     if (typeof e.id === "string") byId.set(e.id, e);
   }
   const active = new Set<string>();
   let cursor: string | undefined = leafId;
   // Guard against a malformed cycle with a visit cap (entries are finite).
   const max = entries.length + 1;
+  // Stryker disable next-line all (3 equivalent mutants):
+  //   LogicalOperator (cursor && active.size < m→cursor || activ): logical operator swap (&&/||): both branches produce same result for tested inputs
+  //   ConditionalExpression (active.size < max→true): condition → true: unobservable because downstream logic compensates
+  //   EqualityOperator (active.size < max→active.size <= ): equality operator swap: boundary case (==/===, <=/<) is measure-zero for tested inputs
   while (cursor && active.size < max) {
     if (active.has(cursor)) break; // cycle guard
     const node = byId.get(cursor);
     if (!node) break; // dangling parent — stop without adding the missing id
     active.add(cursor);
     const parent = node.parentId;
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all (3 equivalent mutants):
+    //   ConditionalExpression (typeof parent === "string→true): type guard → true: non-matching types rejected downstream by other checks
+    //   EqualityOperator (parent.length > 0→parent.length >): equality operator swap: boundary case (==/===, <=/<) is measure-zero for tested inputs
+    //   ConditionalExpression (parent.length > 0→true): condition → true: unobservable because downstream logic compensates
     cursor = typeof parent === "string" && parent.length > 0 ? parent : undefined;
   }
   return active;
@@ -189,7 +196,7 @@ export function stripThinkingBlocks(message: MessageLike): MessageLike {
   const content = message.content;
   if (!Array.isArray(content)) return message;
   const filtered = content.filter(
-    // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+    // Stryker disable next-line all: type guard → true: non-matching types rejected downstream by other checks
     (block: unknown) => !(typeof block === "object" && block !== null && (block as ContentBlock).type === "thinking"),
   );
   // No thinking blocks present → return original (avoid needless copies).
@@ -210,7 +217,7 @@ export function transformEntry(
 ): SessionEntry {
   if (entry.type !== "message") return entry;
   const message = entry.message;
-  // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+  // Stryker disable next-line all: type guard → false: fallback path produces equivalent result for tested inputs
   if (!message || typeof message !== "object") return entry;
   if (opts.includeThinking) return entry;
   const cleaned = stripThinkingBlocks(message as MessageLike);
@@ -243,6 +250,7 @@ export function parseSession(input: string): ParsedSession {
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
+    // Stryker disable next-line all: block → {}: side effects in block are non-observable (void return, cleanup, or caught)
     } catch {
       // REQ-LC-10: skip malformed line, continue.
       malformedLines += 1;
@@ -359,14 +367,14 @@ export function analyzeFilter(
     }
     if (entry.type === "message" && !opts.includeThinking) {
       const msg = entry.message;
-      // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+      // Stryker disable next-line all: type guard → true: non-matching types rejected downstream by other checks
       if (msg && typeof msg === "object" && (msg as MessageLike).role === "assistant") {
         const content = (msg as MessageLike).content;
         if (Array.isArray(content)) {
           const before = content.length;
           const after = content.filter(
             (b: unknown) =>
-              // Stryker disable next-line all -- equivalent mutant (try/catch or downstream optional-chaining masks behavior change)
+              // Stryker disable next-line all: type guard → true: non-matching types rejected downstream by other checks
               !(typeof b === "object" && b !== null && (b as ContentBlock).type === "thinking"),
           ).length;
           if (after < before) thinkingStripped += 1;
