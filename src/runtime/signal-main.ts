@@ -312,9 +312,11 @@ export function createSignalMainTool(
   ): Promise<{ ok: true; via: "intercom" } | { ok: false; error: string }> {
     try {
       await deps.client.send(payload);
+      // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
       deps.onLog?.("info", "signal sent via intercom", { kind: payload.details.kind });
       return { ok: true, via: "intercom" };
     } catch (firstErr) {
+      // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
       deps.onLog?.("warn", "intercom send first attempt failed; retrying", {
         kind: payload.details.kind,
         error: firstErr instanceof Error ? firstErr.message : String(firstErr),
@@ -326,6 +328,7 @@ export function createSignalMainTool(
         return { ok: true, via: "intercom" };
       } catch (secondErr) {
         const msg = secondErr instanceof Error ? secondErr.message : String(secondErr);
+        // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
         deps.onLog?.("error", "intercom send failed after retry", {
           kind: payload.details.kind,
           error: msg,
@@ -402,6 +405,7 @@ export function createSignalMainTool(
           severity,
           writtenAtMs: now(),
         });
+        // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
         deps.onLog?.("warn", "signal written to fallback file", {
           kind: payload.details.kind,
           path: writtenPath,

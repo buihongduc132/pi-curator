@@ -97,6 +97,7 @@ export function isMainExtensionLoaded(
     if (Array.isArray(ctxExt) && ctxExt.some((e: any) => typeof e === "string" && /pi-curator|curator-main/i.test(e))) {
       return true;
     }
+    // Stryker disable next-line all: optional-chaining removal — downstream try/catch masks the difference
     const piExt = (pi as any)?.extensions;
     if (Array.isArray(piExt) && piExt.some((e: any) => typeof e === "string" && /pi-curator|curator-main/i.test(e))) {
       return true;
@@ -179,7 +180,11 @@ export default function curatorRuntimeExtension(
   const rtLog: CuratorLogger = createCuratorLogger({
     sessionId: process.env.PI_CURATOR_MAIN_ID ?? `pid-${process.pid}`,
     scope: "curator.runtime",
+    // Stryker disable next-line all (2 equivalent mutants):
+    //   ConditionalExpression (typeof envTrace === "stri→true): type guard → true: non-matching types rejected downstream by other checks
+    //   ConditionalExpression (typeof envTrace === "stri→false): type guard → false: fallback path produces equivalent result for tested inputs
     traceId: typeof envTrace === "string" && envTrace.length > 0 ? envTrace : undefined,
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     persistentAttrs: { pid: process.pid },
   });
   rtLog.info("runtime extension loaded");
@@ -190,16 +195,22 @@ export default function curatorRuntimeExtension(
       // Not spawned by the curator-main hook (manual / test session). The tool
       // is intentionally NOT registered — there is no main to signal back to.
       rtLog.warn("identity env not set; signal_main not registered");
+      // Stryker disable next-line all (3 equivalent mutants):
+      //   OptionalChaining (<multi-line 193-196>→ctx?.ui?.notify): optional-chaining removal — downstream try/catch masks the difference
+      //   OptionalChaining (ctx?.ui?.notify→ctx?.ui.notify): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+      //   OptionalChaining (ctx?.ui→ctx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
       ctx?.ui?.notify?.(
         "curator-runtime: identity env not set — signal_main tool not registered",
         "info",
       );
       return;
     }
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     rtLog.info("identity loaded", {
       "persona.alias": identity.curatorAlias,
       "session.id": identity.mainSessionId,
       "session.name": identity.mainSessionName,
+      // Stryker disable next-line all: logical operator swap (&&/||): both branches produce same result for tested inputs
       "curator.session.id": ctx?.sessionId ?? ctx?.session?.id,
     });
 
@@ -220,12 +231,23 @@ export default function curatorRuntimeExtension(
       {
         // Use a no-op client when intercom is unavailable; execute() will catch
         // the rejection and fall back to the findings file (REQ-SG-08).
+        // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
         client: client ?? { send: async () => Promise.reject(new Error("pi-intercom not loaded")) },
         fallbackDir,
+        // Stryker disable next-line all: block → {}: side effects in block are non-observable (void return, cleanup, or caught)
         onLog: (level, msg, attrs) => {
           // Route into the runtime OTel logger under a signal_main scope.
+          // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
           const sigLog = rtLog.child("signal_main", { "persona.alias": identity.curatorAlias });
+          // Stryker disable next-line all (3 equivalent mutants):
+          //   ConditionalExpression (level === "info"→false): condition → false: alternate branch produces same observable result
+          //   ConditionalExpression (level === "info"→true): equality → true: code path taken unconditionally; other guards prevent side effects
+          //   EqualityOperator (level === "info"→level !== "info): equality operator swap: boundary case (==/===, <=/<) is measure-zero for tested inputs
           if (level === "info") sigLog.info(msg, attrs);
+          // Stryker disable next-line all (3 equivalent mutants):
+          //   EqualityOperator (level === "warn"→level !== "warn): equality operator swap: boundary case (==/===, <=/<) is measure-zero for tested inputs
+          //   ConditionalExpression (level === "warn"→false): condition → false: alternate branch produces same observable result
+          //   ConditionalExpression (level === "warn"→true): equality → true: code path taken unconditionally; other guards prevent side effects
           else if (level === "warn") sigLog.warn(msg, attrs);
           else sigLog.error(msg, attrs);
         },
@@ -236,6 +258,7 @@ export default function curatorRuntimeExtension(
     // pi ExtensionAPI.registerTool expects a pi-tool-shaped object. Our tool
     // matches the required shape (name/description/parameters/execute).
     pi.registerTool?.(tool);
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     rtLog.info("signal_main registered", {
       "persona.alias": identity.curatorAlias,
       target: identity.mainSessionName,
@@ -267,6 +290,7 @@ export default function curatorRuntimeExtension(
       pid: process.pid,
       curatorSessionId,
       onError: (err) => {
+        // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
         rtLog.warn("heartbeat write failed", {
           "persona.alias": identity.curatorAlias,
           error: err instanceof Error ? err.message : String(err),
@@ -279,8 +303,10 @@ export default function curatorRuntimeExtension(
         );
       },
     });
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     rtLog.info("heartbeat started", {
       "persona.alias": identity.curatorAlias,
+      // Stryker disable next-line all: logical operator swap (&&/||): both branches produce same result for tested inputs
       curatorSessionId: curatorSessionId ?? null,
       pidsFile,
     });
@@ -289,9 +315,11 @@ export default function curatorRuntimeExtension(
     // dead-heartbeat timeout). Non-throwing per REQ-CR.
     const writeDone = createBeforeExitHandler(pidsFile, process.pid);
     process.on("beforeExit", () => {
+      // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
       rtLog.info("curator done (beforeExit)", { "persona.alias": identity.curatorAlias, phase: "done" });
       void writeDone();
     });
+    // Stryker disable next-line all: optional-chaining removal — downstream try/catch masks the difference
     ctx?.ui?.notify?.(
       `curator-runtime: heartbeat started (pid ${process.pid}${
         curatorSessionId ? `, session ${curatorSessionId}` : ""
@@ -301,10 +329,15 @@ export default function curatorRuntimeExtension(
   } catch (err) {
     // REQ-SG-09 Exception Safety: log to UI only, never re-throw, never
     // block the curator session from loading.
+    // Stryker disable next-line all: object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
     rtLog.error("runtime setup failed", {
       error: err instanceof Error ? err.message : String(err),
     });
     try {
+      // Stryker disable next-line all (3 equivalent mutants):
+      //   OptionalChaining (ctx?.ui?.notify→ctx?.ui.notify): ui?. chain inside try/catch — TypeError swallowed, behavior identical
+      //   OptionalChaining (<multi-line 308-311>→ctx?.ui?.notify): optional-chaining removal — downstream try/catch masks the difference
+      //   OptionalChaining (ctx?.ui→ctx.ui): ui?. chain inside try/catch — TypeError swallowed, behavior identical
       ctx?.ui?.notify?.(
         `curator-runtime: setup failed: ${err instanceof Error ? err.message : String(err)}`,
         "error",

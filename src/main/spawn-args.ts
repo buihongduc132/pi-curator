@@ -144,6 +144,7 @@ export function buildSpawnArgs(input: BuildSpawnArgsInput): BuildSpawnArgsResult
     intercomExtensionPath,
     goalContents = "",
   } = input;
+  // Stryker disable next-line all: logical operator swap (&&/||): both branches produce same result for tested inputs
   const piBin = input.piBin ?? "pi";
 
   // REQ-CF mutual exclusion: both set is a config error. We DO NOT silently

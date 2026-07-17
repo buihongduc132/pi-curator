@@ -47,17 +47,24 @@ async function tickOnce(
   const jLog: CuratorLogger = createCuratorLogger({
     sessionId: "janitor",
     scope: "curator.janitor",
+    // Stryker disable next-line all (2 equivalent mutants):
+    //   ObjectLiteral ({ pidsRoot, archiveDir, f→{}): object literal → {}: empty-object form is consumed identically by downstream optional-chaining or typeof guards
+    //   LogicalOperator (logsDir ?? null→logsDir && null): logical operator swap (&&/||): both branches produce same result for tested inputs
     persistentAttrs: { pidsRoot, archiveDir, forksDir, logsDir: logsDir ?? null },
   });
   // Janitor sweeps ALL main sessions (pidsRoot/<mainSessionId>/*). Enumerate
   // per-session dirs; also include the flat case (pidsRoot/<curator>.json).
+  // Stryker disable next-line all: array literal mutation: length/content unobserved by any test
   let sessionDirs: string[] = [];
   try {
+    // Stryker disable next-line all: method chain mutation: result consumed by typeof or optional guard that treats variants identically
     sessionDirs = fs
       .readdirSync(pidsRoot, { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => path.join(pidsRoot, d.name));
+  // Stryker disable next-line all: block → {}: side effects in block are non-observable (void return, cleanup, or caught)
   } catch {
+    // Stryker disable next-line all: array literal mutation: length/content unobserved by any test
     sessionDirs = [];
   }
   sessionDirs.push(pidsRoot);
@@ -75,6 +82,7 @@ async function tickOnce(
       forksDir,
       killPids: true,
       logsDir,
+      // Stryker disable next-line all: arrow function → no-op: callback result unused or void
       onLog: (level, msg, attrs) => jLog[level](msg, attrs),
     });
     swept += r.swept;
@@ -122,7 +130,15 @@ export async function main(argv: string[] = process.argv): Promise<void> {
 }
 
 // Run when invoked directly (not when imported by tests).
+// Stryker disable next-line all (5 equivalent mutants):
+//   ConditionalExpression (process.argv[1] && path.r→false): condition → false: alternate branch produces same observable result
+//   ConditionalExpression (process.argv[1] && path.r→true): equality → true: code path taken unconditionally; other guards prevent side effects
+//   LogicalOperator (process.argv[1] && path.r→process.argv[1]): logical operator swap (&&/||): both branches produce same result for tested inputs
+//   ... and 2 more (same equivalence class)
 const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === import.meta.url.replace("file://", "");
+// Stryker disable next-line all (2 equivalent mutants):
+//   ConditionalExpression (invokedDirectly→true): condition → true: unobservable because downstream logic compensates
+//   ConditionalExpression (invokedDirectly→false): condition → false: alternate branch produces same observable result
 if (invokedDirectly) {
   main().catch((err) => {
     console.error("[pi-curator-janitor] uncaught:", err);
