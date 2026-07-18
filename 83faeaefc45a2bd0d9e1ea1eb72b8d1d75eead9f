@@ -1,0 +1,8 @@
+OBSOLETE: fix/m95-main
+
+OBSOLETE: merged to main via merge to main (commit 83faeaefc4).
+  - Final landing commit: 83faeaefc45a2bd0d9e1ea1eb72b8d1d75eead9f
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:40:50Z.
+Recovery: git checkout fix/m95-main  (ref untouched)  /  git checkout refs/tags/obsolete/fix/m95-main
