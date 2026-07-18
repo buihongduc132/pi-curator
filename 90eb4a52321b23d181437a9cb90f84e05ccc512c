@@ -1,0 +1,8 @@
+OBSOLETE: fix/mutation-final-commands
+
+OBSOLETE: merged to main via merge to main (commit 90eb4a5232).
+  - Final landing commit: 90eb4a52321b23d181437a9cb90f84e05ccc512c
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:41:01Z.
+Recovery: git checkout fix/mutation-final-commands  (ref untouched)  /  git checkout refs/tags/obsolete/fix/mutation-final-commands
