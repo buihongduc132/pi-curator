@@ -1,0 +1,8 @@
+OBSOLETE: feat/curator-otel-logging
+
+OBSOLETE: merged to main via PR #12.
+  - Final landing commit: edb3491938f63c657beb64ec8ca28d511e46139d
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:40:46Z.
+Recovery: git checkout feat/curator-otel-logging  (ref untouched)  /  git checkout refs/tags/obsolete/feat/curator-otel-logging
