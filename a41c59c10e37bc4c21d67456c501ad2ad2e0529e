@@ -1,0 +1,8 @@
+OBSOLETE: fix/mutation-survivors-runtime
+
+OBSOLETE: merged to main via merge to main (commit a41c59c10e).
+  - Final landing commit: a41c59c10e37bc4c21d67456c501ad2ad2e0529e
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:41:20Z.
+Recovery: git checkout fix/mutation-survivors-runtime  (ref untouched)  /  git checkout refs/tags/obsolete/fix/mutation-survivors-runtime
