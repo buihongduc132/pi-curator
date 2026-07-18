@@ -1,0 +1,8 @@
+OBSOLETE: fix/mutation-survivors-main-fslock
+
+OBSOLETE: merged to main via merge to main (commit 0e64db9cd1).
+  - Final landing commit: 0e64db9cd189d0213c06d43b56aa349b4d61e103
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:41:15Z.
+Recovery: git checkout fix/mutation-survivors-main-fslock  (ref untouched)  /  git checkout refs/tags/obsolete/fix/mutation-survivors-main-fslock
