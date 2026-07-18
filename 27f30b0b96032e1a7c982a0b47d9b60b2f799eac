@@ -1,0 +1,8 @@
+OBSOLETE: fix/mutation-survivors-crosscheck-pr
+
+OBSOLETE: merged to main via merge to main (commit 27f30b0b96).
+  - Final landing commit: 27f30b0b96032e1a7c982a0b47d9b60b2f799eac
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:41:08Z.
+Recovery: git checkout fix/mutation-survivors-crosscheck-pr  (ref untouched)  /  git checkout refs/tags/obsolete/fix/mutation-survivors-crosscheck-pr
