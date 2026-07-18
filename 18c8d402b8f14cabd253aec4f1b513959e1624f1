@@ -1,0 +1,8 @@
+OBSOLETE: fix/mutation-final-fslock-rx
+
+OBSOLETE: merged to main via merge to main (commit 18c8d402b8).
+  - Final landing commit: 18c8d402b8f14cabd253aec4f1b513959e1624f1
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:41:04Z.
+Recovery: git checkout fix/mutation-final-fslock-rx  (ref untouched)  /  git checkout refs/tags/obsolete/fix/mutation-final-fslock-rx
