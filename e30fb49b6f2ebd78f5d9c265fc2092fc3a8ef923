@@ -1,0 +1,8 @@
+OBSOLETE: feat/curator-observability-floor
+
+OBSOLETE: merged to main via merge to main (commit e30fb49b6f).
+  - Final landing commit: e30fb49b6f2ebd78f5d9c265fc2092fc3a8ef923
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:40:41Z.
+Recovery: git checkout feat/curator-observability-floor  (ref untouched)  /  git checkout refs/tags/obsolete/feat/curator-observability-floor
