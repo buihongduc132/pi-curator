@@ -6,3 +6,12 @@ OBSOLETE: merged to main via merge to main (commit 811819c1a3).
 
 Marked obsolete by git-flow-branch-del on 2026-07-18T07:41:36Z.
 Recovery: git checkout pi-teams/019f6a00-ea2/survivor-fixer-util  (ref untouched)  /  git checkout refs/tags/obsolete/pi-teams/019f6a00-ea2/survivor-fixer-util
+
+OBSOLETE: pi-teams/019f6a00-ea2/survivor-fixer-wiring
+
+OBSOLETE: merged to main via merge to main (commit 811819c1a3).
+  - Final landing commit: 811819c1a31d74e29fc79ceee10690bf8b71260f
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:41:40Z.
+Recovery: git checkout pi-teams/019f6a00-ea2/survivor-fixer-wiring  (ref untouched)  /  git checkout refs/tags/obsolete/pi-teams/019f6a00-ea2/survivor-fixer-wiring
