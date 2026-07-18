@@ -1,0 +1,8 @@
+OBSOLETE: fix/mutation-survivors-util
+
+OBSOLETE: merged to main via merge to main (commit 0c19f8dc91).
+  - Final landing commit: 0c19f8dc91ae2b5de4f23a5288bf1bdf7e085e20
+  - This branch tip is now an ancestor of main.
+
+Marked obsolete by git-flow-branch-del on 2026-07-18T07:41:28Z.
+Recovery: git checkout fix/mutation-survivors-util  (ref untouched)  /  git checkout refs/tags/obsolete/fix/mutation-survivors-util
