@@ -170,6 +170,17 @@ export interface ReceiverCtx {
   sessionManager?: { getSessionId: () => string };
   sendMessage?: (msg: SendMessagePayload, opts: SendMessageOptions) => void;
   ui: { notify?: (message: string, level?: "info" | "warning" | "error") => void };
+  /**
+   * Optional structured-log sink (OTel-compatible). The receiver extension
+   * wires the curator logger here so every instrumentation point emits an
+   * OTel-shaped record. Pure: if omitted, no logging happens (backward
+   * compat for legacy callers + unit tests).
+   */
+  onLog?: (
+    level: "info" | "debug" | "warn" | "error",
+    msg: string,
+    attrs?: Record<string, unknown>,
+  ) => void;
 }
 
 /**
@@ -220,6 +231,7 @@ export function processIncoming(
   // try/catch. On any exception, log to the UI only (display:false, never
   // re-throw, never block the main turn, never crash the main session).
   // A malformed curator signal is dropped after logging, not fatal.
+  const onLog = ctx?.onLog;
   try {
     // Extract the message from the event wrapper if present. The inline
     // `"message" in event ? event.message : event` ternary does NOT narrow
@@ -231,6 +243,17 @@ export function processIncoming(
     // 1. Sender filter (REQ-SG-03) — match sender, NOT customType.
     const sender = resolveSender(message);
     if (!sender || !isKnownCuratorSender(sender, knownCurators)) {
+      // OTel: debug record for filter rejections (silent drop, observability
+      // for troubleshooting only — never blocks, never escalates).
+      try {
+        onLog?.(
+          "debug",
+          "curator signal dropped — unknown sender",
+          sender ? { "from.name": sender.name, "from.id": sender.id ?? null } : { "from.name": null },
+        );
+      } catch {
+        // logger must never break the receiver (REQ-SG-09)
+      }
       return false; // unknown sender — ignore (no throw, REQ-SG-09).
     }
 
@@ -246,6 +269,20 @@ export function processIncoming(
       targetMainId &&
       targetMainId !== thisSessionId
     ) {
+      // OTel: debug record for session-targeting rejection.
+      try {
+        onLog?.(
+          "debug",
+          "curator signal dropped — session target mismatch",
+          {
+            "session.id": thisSessionId,
+            "target.session.id": targetMainId,
+            "persona.alias": resolveCuratorAlias(message, sender) ?? null,
+          },
+        );
+      } catch {
+        // logger must never break the receiver
+      }
       return false; // different main session — ignore.
     }
 
@@ -270,6 +307,20 @@ export function processIncoming(
     const effectiveKind: CuratorKind =
       severity === "critical" ? "steer" : recoveredKind;
 
+    // OTel: 'signal received' record (after all filters pass, before dispatch).
+    // Captures from.name/from.id/kind/alias as required by design.md.
+    try {
+      onLog?.("info", "signal received", {
+        "from.name": sender.name,
+        "from.id": sender.id ?? null,
+        kind: effectiveKind,
+        "persona.alias": curatorAlias ?? null,
+        severity,
+      });
+    } catch {
+      // logger must never break the receiver
+    }
+
     const { msg, opts } = buildSendMessage(effectiveKind, cleanBody, undefined, {
       severity,
       curatorAlias,
@@ -278,7 +329,28 @@ export function processIncoming(
     });
 
     // 5. Re-deliver into the main session.
-    pi.sendMessage(msg, opts);
+    try {
+      pi.sendMessage(msg, opts);
+      // OTel: dispatch success record (info).
+      try {
+        onLog?.("info", "signal dispatched", { kind: effectiveKind, ok: true });
+      } catch {
+        // logger must never break the receiver
+      }
+    } catch (dispatchErr) {
+      // OTel: dispatch failure record (error) — re-raise so the outer catch
+      // surfaces it to the caller's REQ-SG-09 error path.
+      try {
+        onLog?.("error", "signal dispatch failed", {
+          kind: effectiveKind,
+          ok: false,
+          error: dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr),
+        });
+      } catch {
+        // logger must never break the receiver
+      }
+      throw dispatchErr;
+    }
 
     // REQ-SG-08: UI notification at the severity level (fire-and-forget,
     // best-effort — never blocks the main turn).
