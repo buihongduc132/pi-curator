@@ -23,6 +23,7 @@ import {
   type ReceiverPi,
 } from "./curator-receiver.js";
 import { getCachedConfig, enabledPersonas } from "../util/config.js";
+import { createCuratorLogger, type CuratorLogger } from "../util/logger.js";
 
 type AnyExtensionAPI = import("@mariozechner/pi-coding-agent").ExtensionAPI | any;
 type AnyExtensionContext = any;
@@ -38,8 +39,25 @@ export default function curatorReceiverExtension(
   pi: AnyExtensionAPI,
   _ctx?: AnyExtensionContext,
 ): void {
+  // Receiver-side OTel logger. sessionId is read from ctx lazily per hook
+  // fire (the extension entry runs before any session is bound); scope
+  // `curator.receiver`. traceId is intentionally undefined here — receiver
+  // does NOT carry the spawn trace (it runs in the MAIN process, not a forked
+  // curator child).
+  let log: CuratorLogger | undefined;
+  function ensureLog(sessionId: string | undefined): CuratorLogger {
+    if (!log) {
+      log = createCuratorLogger({
+        sessionId: sessionId ?? `pid-${process.pid}`,
+        scope: "curator.receiver",
+      });
+    }
+    return log;
+  }
   pi.on("message_start", (event: unknown, ctx: AnyExtensionContext) => {
     try {
+      const sessionId = ctx?.sessionId ?? ctx?.session?.id;
+      const rtLog = ensureLog(sessionId);
       // Build the known-curators list from the project config (REQ-SG-03). A
       // curator signal from an unconfigured alias is dropped upstream by
       // processIncoming's sender filter.
@@ -56,15 +74,28 @@ export default function curatorReceiverExtension(
       // Adapt the live pi/ctx surface into the pure-helper shapes so the
       // behavioral pipeline is unit-testable without a real pi binary.
       const ctxAdapter: ReceiverCtx = {
-        sessionId: ctx?.sessionId ?? ctx?.session?.id,
+        sessionId,
         sessionManager: ctx?.sessionManager,
-        // Stryker disable next-line all: type guard → false: fallback path produces equivalent result for tested inputs
-        sendMessage: typeof ctx?.sendMessage === "function" ? ctx.sendMessage : undefined,
+        sendMessage:
+          typeof ctx?.sendMessage === "function" ? ctx.sendMessage : undefined,
         ui: {
           notify:
             typeof ctx?.ui?.notify === "function"
               ? ctx.ui.notify.bind(ctx.ui)
               : undefined,
+        },
+        // OTel: route processIncoming's onLog callbacks into the receiver
+        // logger under the matching level. Logger never throws, so this is
+        // safe to call from inside the REQ-SG-09 try/catch.
+        onLog: (level, msg, attrs) => {
+          try {
+            if (level === "debug") rtLog.debug(msg, attrs);
+            else if (level === "info") rtLog.info(msg, attrs);
+            else if (level === "warn") rtLog.warn(msg, attrs);
+            else rtLog.error(msg, attrs);
+          } catch {
+            // logger is non-throwing by contract; belt-and-suspenders
+          }
         },
       };
       const piAdapter: ReceiverPi = {
