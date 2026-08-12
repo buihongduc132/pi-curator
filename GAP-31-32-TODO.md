@@ -1,89 +1,118 @@
 # GAP-31/32 Integration TODO
 
-## Completed
-- ✅ Rate-limiter module implemented (src/curator-receiver/rate-limiter.ts)
-- ✅ Severity-handler module implemented (src/curator-receiver/severity-handler.ts)
-- ✅ Unit tests passing (24/24)
-- ✅ Integration tests passing (7/7)
-- ✅ Committed (commits 8147547, b7b91d0)
+## Status: DEFERRED
 
-## Remaining Work (NOT in PR yet)
+After 3+ hours and 2 worker sub-agents, pipeline integration broke 47 tests. 
 
-### Wire modules into receiver pipeline
-Location: `src/curator-receiver/curator-receiver.ts` around line 324-333
+**Modules implemented and tested** (31/31 passing):
+- ✅ `src/curator-receiver/rate-limiter.ts` (3377 bytes, 13 tests)
+- ✅ `src/curator-receiver/severity-handler.ts` (3425 bytes, 11 tests)
+- ✅ `src/curator-receiver/gap31-32-integration.test.ts` (7 integration tests)
 
-**Before (current)**:
+**Pipeline integration attempted but reverted** due to test failures.
+
+## What Works
+
+The rate-limiter and severity-handler modules are production-ready:
+- Pure functions, fully unit-tested
+- Integration tests verify cross-module behavior
+- No external dependencies
+- Ready to wire into pipeline when test strategy is resolved
+
+## What's Needed
+
+### 1. Test Strategy
+Current tests assume synchronous, immediate dispatch. GAP-31/32 introduces:
+- Queuing (signals may not dispatch immediately)
+- Batching (multiple signals → single delivery)
+- Turn-based state (deliveredThisTurn flag)
+
+**Options**:
+1. Refactor existing tests to expect queued behavior
+2. Add feature flag to disable rate limiting in tests
+3. Provide test doubles for rate-limiter state
+
+### 2. Integration Points
+
+**src/curator-receiver/curator-receiver.ts** around line 324-333:
+
 ```typescript
+// Current (synchronous dispatch):
 const { msg, opts } = buildSendMessage(effectiveKind, cleanBody, undefined, {
-  severity,
-  curatorAlias,
-  mainSessionId,
-  spawnedAt,
+  severity, curatorAlias, mainSessionId, spawnedAt,
 });
-
-// 5. Re-deliver into the main session.
 pi.sendMessage(msg, opts);
-```
 
-**After (integrate GAP-31/32)**:
-```typescript
-// GAP-31/32: Check severity decision
+// Needed (with rate limiting):
+import { rateLimiterState, addToQueue, shouldDeliver, batchSignals, ... } from "./rate-limiter.js";
+import { decideSeverityAction } from "./severity-handler.js";
+
+// 1. Check severity
 const severityDecision = decideSeverityAction(message, severity);
 
-// GAP-31/32: Add to rate limiter queue
-state = addToQueue(state, message, computeHash(cleanBody));
-state = deduplicateQueue(state);
-state = expireOldSignals(state, 5); // expire >5 turns
+// 2. Add to queue
+rateLimiterState = addToQueue(rateLimiterState, message, hash);
+rateLimiterState = deduplicateQueue(rateLimiterState);
+rateLimiterState = expireOldSignals(rateLimiterState, 5);
 
-// GAP-31/32: Only deliver if rate limit allows
-if (!shouldDeliver(state)) {
-  return true; // queued, will deliver next turn
+// 3. Check rate limit
+if (!shouldDeliver(rateLimiterState)) {
+  // Queued for next turn
+  return;
 }
 
-// Batch queued signals
-const batchedMessage = batchSignals(state.queue);
-
+// 4. Batch and deliver
+const batched = batchSignals(rateLimiterState.queue);
 const { msg, opts } = buildSendMessage(
   severityDecision.deliverAs === "steer" ? "steer" : effectiveKind,
-  batchedMessage.content,
+  batched.content,
   undefined,
-  {
-    severity,
-    curatorAlias,
-    mainSessionId,
-    spawnedAt,
-    shouldBlock: severityDecision.shouldBlock,
-  }
+  { ...batched.details, shouldBlock: severityDecision.shouldBlock }
 );
 
-// GAP-31/32: Auto-create file for critical + path
+// 5. Auto-create file for critical
 if (severityDecision.autoCreateFile) {
   const filePath = extractFilePath(cleanBody);
   if (filePath) {
-    // Create file at filePath
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, `# ${curatorAlias} findings\n\n${cleanBody}`);
   }
 }
 
-// 5. Re-deliver into the main session.
 pi.sendMessage(msg, opts);
-
-// GAP-31/32: Mark delivered, remove from queue
-state = markDelivered(state);
-state = removeFromQueue(state);
+rateLimiterState = markDelivered(rateLimiterState);
+rateLimiterState = removeFromQueue(rateLimiterState);
 ```
 
-### Add state management
-Need to maintain `RateLimiterState` across turns:
-- Store in extension context or global
-- Initialize on extension load
-- Advance turn on turn_end hook
+### 3. State Management
 
-### Add turn_end hook
-Wire `advanceTurn()` into turn_end hook to reset `deliveredThisTurn` flag.
+Need persistent `RateLimiterState` across turns:
+```typescript
+let rateLimiterState: RateLimiterState = {
+  queue: [],
+  currentTurn: 0,
+  deliveredThisTurn: false,
+};
+```
 
-### Integration test against full pipeline
-Currently only unit/integration tests. Need end-to-end test with real pi.sendMessage mock.
+### 4. Turn Hook
 
-## Estimated remaining work
-2-3 hours to wire, test, and verify no regressions.
+Wire `advanceTurn()` into existing turn_end hook in `src/curator-receiver/index.ts`:
+```typescript
+pi.on("turn_end", () => {
+  rateLimiterState = advanceTurn(rateLimiterState);
+});
+```
+
+## Estimated Work
+
+- Test strategy decision: 1-2 hours
+- Integration implementation: 2-3 hours
+- Test fixes/refactoring: 3-4 hours
+- Verification: 1 hour
+
+**Total**: 7-10 hours
+
+## Recommendation
+
+Defer GAP-31/32 pipeline integration to dedicated ticket. Current modules provide foundation for future work. Priority: fix GAP-30/34, ship what works.
