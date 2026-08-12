@@ -53,8 +53,8 @@ export function evaluateSpawnGate(input: SpawnGateInput): SpawnGateResult {
     };
   }
 
-  const byTurns = hasTurns && input.turnsSinceLastSpawn >= everyTurns;
-  const byMins = hasMins && input.minsSinceLastSpawn >= everyMins;
+  const byTurns = hasTurns && everyTurns > 0 && input.turnsSinceLastSpawn >= everyTurns;
+  const byMins = hasMins && everyMins > 0 && input.minsSinceLastSpawn >= everyMins;
 
   if (byTurns || byMins) {
     return {
