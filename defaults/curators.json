@@ -1,27 +1,53 @@
 {
+  // defaults/curators.json — REFERENCE curator personas shipped with pi-curator
+  // (REQ-CF-10).
+  //
+  // These are EXAMPLES, NOT auto-loaded. To use one, COPY this file to
+  //   ~/.pi-curator/curators.json            (global)
+  //   <project-root>/.pi-curator/curators.json (project)
+  // and trim/edit to taste. The runtime never reads this file directly; it is
+  // layered as: defaults <- global <- project (REQ-CF-03).
+  //
+  // Schema: see extensions/util/config.ts (CuratorPersona, REQ-CF-04). Both
+  // personas below validate cleanly under validateConfig() as long as their
+  // goalFile paths resolve on disk relative to the package root.
+  //
+  //   spec  — spec-checker. Reviews the main session trajectory against the
+  //           governing OpenSpec change and appends (kind=append) conformance
+  //           findings. Non-urgent by design.
+  //   scold — scold-reminder generalization. Nudges on skipped skills, ad-hoc
+  //           shell commands, and unfollowed instructions. Uses both steer
+  //           (urgent anti-pattern) and append (gentle reminder).
   "curators": {
     "spec": {
       "alias": "spec",
-      "enabled": true,
       "goalFile": "defaults/goals/spec.md",
+      "model": "role-smart",
+      "scope": "main-only",
       "spawn": {
-        "everyTurns": 5
+        "everyTurns": 10,
+        "everyMins": 15
       },
-      "includeThinking": false,
+      "contextBudget": 60000,
+      "appendDisplay": true,
       "heartbeat": {
         "intervalSec": 5,
         "staleSec": 30,
         "deadSec": 120
       }
     },
+
     "scold": {
       "alias": "scold",
-      "enabled": true,
       "goalFile": "defaults/goals/scold.md",
+      "model": "role-smart",
+      "scope": "main-only",
       "spawn": {
-        "everyTurns": 3
+        "everyTurns": 5,
+        "everyMins": 8
       },
-      "includeThinking": false,
+      "contextBudget": 40000,
+      "appendDisplay": true,
       "heartbeat": {
         "intervalSec": 5,
         "staleSec": 30,
@@ -29,6 +55,9 @@
       }
     }
   },
+
+  // Janitor config (REQ-CF-05). Per-project via pm2 namespace
+  // pi-curator:<project>; these are the shipped reference defaults.
   "janitor": {
     "enabled": true,
     "interval": "5m",
